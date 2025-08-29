@@ -1,0 +1,197 @@
+// apps/backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//////////////////////////////////////////////////////////
+// Enums
+//////////////////////////////////////////////////////////
+
+enum InventoryRole {
+  EDITOR
+  VIEWER
+}
+
+enum FieldKind {
+  TEXT // single-line string
+  NUMBER // numeric
+  MULTILINE // multi-line text
+  LINK // url or document link
+  BOOLEAN // true/false
+}
+
+//////////////////////////////////////////////////////////
+// Models
+//////////////////////////////////////////////////////////
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relations
+  owned        Inventory[]       @relation("UserOwnsInventories")
+  memberships  InventoryMember[]
+  comments     Comment[]
+  likes        Like[]
+  itemsCreated Item[]            @relation("ItemCreatedBy")
+}
+
+model Inventory {
+  id           Int      @id @default(autoincrement())
+  ownerId      Int
+  title        String
+  description  String?  @db.Text
+  // Keep category as String to simplify TS usage in routes
+  category     String
+  imageUrl     String?
+  isPublic     Boolean  @default(false)
+  version      Int      @default(1)
+  customIdSpec Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // relations
+  owner        User              @relation("UserOwnsInventories", fields: [ownerId], references: [id])
+  items        Item[]
+  customFields CustomField[]
+  members      InventoryMember[]
+  comments     Comment[]
+  tags         InventoryTag[]
+
+  @@index([ownerId])
+}
+
+model InventoryMember {
+  id          Int           @id @default(autoincrement())
+  inventoryId Int
+  userId      Int
+  role        InventoryRole @default(EDITOR)
+  createdAt   DateTime      @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([inventoryId, userId])
+  @@index([userId])
+}
+
+model Tag {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  inventories InventoryTag[]
+}
+
+model InventoryTag {
+  // link table Inventory <-> Tag
+  inventoryId Int
+  tagId       Int
+  createdAt   DateTime @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id])
+  tag       Tag       @relation(fields: [tagId], references: [id])
+
+  @@id([inventoryId, tagId])
+  @@index([tagId])
+}
+
+model Item {
+  id          Int      @id @default(autoincrement())
+  inventoryId Int
+  customId    String
+  createdById Int
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id])
+  createdBy User      @relation("ItemCreatedBy", fields: [createdById], references: [id])
+
+  values   ItemValue[]
+  comments Comment[]
+  likes    Like[]
+
+  // custom IDs unique within a single inventory
+  @@unique([inventoryId, customId])
+  @@index([inventoryId])
+  @@index([createdById])
+}
+
+model CustomField {
+  id          Int       @id @default(autoincrement())
+  inventoryId Int
+  name        String
+  kind        FieldKind
+  position    Int
+  showInTable Boolean   @default(true)
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  inventory Inventory   @relation(fields: [inventoryId], references: [id])
+  values    ItemValue[]
+
+  @@index([inventoryId])
+}
+
+model ItemValue {
+  // one value per (item, field)
+  itemId  Int
+  fieldId Int
+
+  // typed storage (use the column that matches the field kind)
+  valueText   String?  @db.Text
+  valueNumber Float?
+  valueBool   Boolean?
+  valueLink   String?
+
+  createdAt DateTime @default(now())
+
+  item  Item        @relation(fields: [itemId], references: [id])
+  field CustomField @relation(fields: [fieldId], references: [id])
+
+  @@id([itemId, fieldId])
+  @@index([fieldId])
+}
+
+model Comment {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  inventoryId Int?
+  itemId      Int?
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id])
+  inventory Inventory? @relation(fields: [inventoryId], references: [id])
+  item      Item?      @relation(fields: [itemId], references: [id])
+
+  @@index([userId])
+  @@index([inventoryId])
+  @@index([itemId])
+}
+
+model Like {
+  itemId    Int
+  userId    Int
+  createdAt DateTime @default(now())
+
+  item Item @relation(fields: [itemId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([itemId, userId])
+  @@index([userId])
+}

@@ -1,0 +1,18 @@
+# OS / editor
+.DS_Store
+.vscode/
+
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Env
+.env
+.env.*.local
+apps/**/.env
+
+# Build
+dist/
+apps/**/dist/

@@ -1,0 +1,23 @@
+# Node / JS
+node_modules/
+npm-debug.log*
+pnpm-lock.yaml
+yarn.lock
+
+# Builds
+apps/frontend/dist/
+apps/backend/dist/
+coverage/
+*.log
+
+# Env
+.env
+.env.*
+!*.example
+
+# Prisma / DB
+*.sqlite
+*.db
+
+# OS
+.DS_Store
