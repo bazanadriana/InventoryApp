@@ -10,12 +10,14 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p .",
+    "prisma:generate": "prisma generate",
+    "build": "npm run prisma:generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "postinstall": "prisma generate || echo \"skip prisma\"",
     "db:seed": "prisma db seed",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "migrate:deploy": "prisma migrate deploy"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
