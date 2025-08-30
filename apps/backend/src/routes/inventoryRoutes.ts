@@ -4,13 +4,13 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const router = Router();
 
-// Derive the exact "where" shape from the client
+// derive the exact "where" shape from the client
 type FindManyArgs = Parameters<typeof prisma.inventory.findMany>[0];
 type InventoryWhere = FindManyArgs extends { where?: infer W } ? W : Record<string, never>;
 
-// helper to coerce query value -> number | undefined (handles string | string[] | undefined)
-function toInt(q: unknown): number | undefined {
-  const s = Array.isArray(q) ? q[0] : q;
+// helper: string | string[] | undefined -> number | undefined
+function toInt(v: unknown): number | undefined {
+  const s = Array.isArray(v) ? v[0] : v;
   const n = typeof s === "string" ? Number(s) : NaN;
   return Number.isFinite(n) ? n : undefined;
 }
