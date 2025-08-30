@@ -1,34 +1,24 @@
 import { Router } from 'express';
-import { prisma } from '../db/prisma';
-import { requireAuth } from '../middleware/requireAuth';
+import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 const router = Router();
 
-router.get('/inventories/:id/comments', requireAuth, async (req, res, next) => {
-  try {
-    const invId = Number(req.params.id);
-    if (Number.isNaN(invId)) return res.status(400).json({ error: 'Bad inventory id' });
+// POST /api/comments
+router.post('/', async (req, res) => {
+  const userId = Number(req.user?.id ?? req.body.userId);
+  const itemId = Number(req.body.itemId);
+  const content = String(req.body.content ?? '');
 
-    const rows = await prisma.comment.findMany({
-      where: { inventoryId: invId },
-      orderBy: { createdAt: 'asc' },
-      include: { user: true }
-    });
-    res.json(rows);
-  } catch (e) { next(e); }
-});
+  if (!userId || !itemId || !content) {
+    return res.status(400).json({ error: 'userId, itemId and content are required' });
+  }
 
-router.post('/inventories/:id/comments', requireAuth, async (req, res, next) => {
-  try {
-    const invId = Number(req.params.id);
-    if (Number.isNaN(invId)) return res.status(400).json({ error: 'Bad inventory id' });
+  const comment = await prisma.comment.create({
+    data: { userId, itemId, content }
+  });
 
-    const userId = Number((req.user as any).id);
-    const row = await prisma.comment.create({
-      data: { inventoryId: invId, userId, body: String(req.body?.body ?? '') }
-    });
-    res.status(201).json(row);
-  } catch (e) { next(e); }
+  res.json({ ok: true, comment });
 });
 
 export default router;
