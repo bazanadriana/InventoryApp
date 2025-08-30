@@ -4,10 +4,6 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const router = Router();
 
-// derive the exact "where" shape from the client
-type FindManyArgs = Parameters<typeof prisma.inventory.findMany>[0];
-type InventoryWhere = FindManyArgs extends { where?: infer W } ? W : Record<string, never>;
-
 // helper: string | string[] | undefined -> number | undefined
 function toInt(v: unknown): number | undefined {
   const s = Array.isArray(v) ? v[0] : v;
@@ -27,17 +23,17 @@ router.get("/", async (req, res) => {
   const ownerId = toInt(req.query.ownerId);
   const memberId = toInt(req.query.memberId);
 
-  const where = {} as InventoryWhere;
+  // keep the where un-opinionated for TS; Prisma will validate at runtime
+  const where: any = {};
 
   if (q) {
-    (where as any).OR = [
+    where.OR = [
       { title: { contains: q, mode: "insensitive" } },
       { description: { contains: q, mode: "insensitive" } },
     ];
   }
-  if (ownerId !== undefined) (where as any).ownerId = ownerId;
-  if (memberId !== undefined)
-    (where as any).members = { some: { userId: memberId } };
+  if (ownerId !== undefined) where.ownerId = ownerId;
+  if (memberId !== undefined) where.members = { some: { userId: memberId } };
 
   const items = await prisma.inventory.findMany({
     where,
