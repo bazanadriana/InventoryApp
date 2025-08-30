@@ -4,15 +4,19 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const router = Router();
 
-// Derive the exact "where" shape from the client (safer than Prisma.InventoryWhereInput)
+// Derive the exact "where" shape from the client
 type FindManyArgs = Parameters<typeof prisma.inventory.findMany>[0];
 type InventoryWhere = FindManyArgs extends { where?: infer W } ? W : Record<string, never>;
 
+// helper to coerce query value -> number | undefined (handles string | string[] | undefined)
+function toInt(q: unknown): number | undefined {
+  const s = Array.isArray(q) ? q[0] : q;
+  const n = typeof s === "string" ? Number(s) : NaN;
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /**
  * GET /api/inventories?q=&ownerId=&memberId=
- * - q: full-text-ish search on title/description
- * - ownerId: filter inventories by numeric ownerId
- * - memberId: inventories where a member with this userId exists
  */
 router.get("/", async (req, res) => {
   const q =
@@ -20,11 +24,8 @@ router.get("/", async (req, res) => {
       ? req.query.q
       : undefined;
 
-  const ownerId =
-    typeof req.query.ownerId === "string" ? Number(req.query.ownerId) : undefined;
-
-  const memberId =
-    typeof req.query.memberId === "string" ? Number(req.query.memberId) : undefined;
+  const ownerId = toInt(req.query.ownerId);
+  const memberId = toInt(req.query.memberId);
 
   const where = {} as InventoryWhere;
 
@@ -34,10 +35,9 @@ router.get("/", async (req, res) => {
       { description: { contains: q, mode: "insensitive" } },
     ];
   }
-
-  if (Number.isFinite(ownerId)) (where as any).ownerId = ownerId!;
-  if (Number.isFinite(memberId))
-    (where as any).members = { some: { userId: memberId! } };
+  if (ownerId !== undefined) (where as any).ownerId = ownerId;
+  if (memberId !== undefined)
+    (where as any).members = { some: { userId: memberId } };
 
   const items = await prisma.inventory.findMany({
     where,
