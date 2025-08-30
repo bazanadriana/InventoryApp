@@ -1,77 +1,93 @@
-import passport from 'passport';
-import { Strategy as GoogleStrategy, Profile as GoogleProfile } from 'passport-google-oauth20';
-import { Strategy as GitHubStrategy, Profile as GitHubProfile } from 'passport-github2';
-import { prisma } from "../db/prisma/client.js";
+// apps/backend/src/auth/passport.ts
+import passport, { Profile } from 'passport';
+import { PrismaClient } from '@prisma/client';
+import { Strategy as GitHubStrategy } from 'passport-github2';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 
-// local 'done' type
-type Done = (err: any, user?: any, info?: any) => void;
+const prisma = new PrismaClient();
+
+type SafeUser = { id: number; email: string | null };
 
 passport.serializeUser((user: any, done) => done(null, user.id));
-
 passport.deserializeUser(async (id: number, done) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id } });
-    done(null, user || null);
+    const u = await prisma.user.findUnique({ where: { id } });
+    done(null, u ? ({ id: u.id, email: u.email } as SafeUser) : false);
   } catch (e) {
     done(e as any);
   }
 });
 
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL!,
-    },
-    async (_accessToken: string, _refreshToken: string, profile: GoogleProfile, done: Done) => {
-      try {
-        const providerId = profile.id;
-        const email = profile.emails?.[0]?.value;
-        const name = profile.displayName;
-        const avatarUrl = profile.photos?.[0]?.value;
+async function upsertOAuthUser(_provider: 'github' | 'google', profile: Profile) {
+  const email =
+    Array.isArray(profile.emails) && profile.emails[0]?.value
+      ? profile.emails[0].value
+      : null;
+  const name = profile.displayName || profile.username || email || `user_${profile.id}`;
 
-        let user = await prisma.user.findUnique({ where: { providerId } });
-        if (!user) {
-          user = await prisma.user.create({
-            data: { provider: 'google', providerId, email, name, avatarUrl },
-          });
+  // Your schema does NOT include provider/providerId → just use email to find/create
+  let user = email
+    ? await prisma.user.findFirst({ where: { email } })
+    : null;
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: { email, name } as any,
+    });
+  }
+  return user;
+}
+
+export function setupPassport() {
+  if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+    passport.use(
+      new GitHubStrategy(
+        {
+          clientID: process.env.GITHUB_CLIENT_ID,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          callbackURL: process.env.GITHUB_CALLBACK_URL || '/auth/github/callback',
+        },
+        async (
+          accessToken: string,
+          refreshToken: string,
+          profile: Profile,
+          done: (err: any, user?: any) => void
+        ) => {
+          try {
+            const user = await upsertOAuthUser('github', profile);
+            return done(null, { id: user.id, email: user.email } as SafeUser);
+          } catch (e) {
+            return done(e as any);
+          }
         }
-        return done(null, user);
-      } catch (err) {
-        return done(err as any);
-      }
-    }
-  )
-);
+      )
+    );
+  }
 
-passport.use(
-  new GitHubStrategy(
-    {
-      clientID: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      callbackURL: process.env.GITHUB_CALLBACK_URL!,
-      scope: ['user:email'],
-    },
-    async (_accessToken: string, _refreshToken: string, profile: GitHubProfile, done: Done) => {
-      try {
-        const providerId = profile.id;
-        const email = Array.isArray(profile.emails) ? profile.emails[0]?.value : undefined;
-        const name = profile.username || profile.displayName;
-        const avatarUrl = profile.photos?.[0]?.value;
-
-        let user = await prisma.user.findUnique({ where: { providerId } });
-        if (!user) {
-          user = await prisma.user.create({
-            data: { provider: 'github', providerId, email, name, avatarUrl },
-          });
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
+        },
+        async (
+          accessToken: string,
+          refreshToken: string,
+          profile: Profile,
+          done: (err: any, user?: any) => void
+        ) => {
+          try {
+            const user = await upsertOAuthUser('google', profile);
+            return done(null, { id: user.id, email: user.email } as SafeUser);
+          } catch (e) {
+            return done(e as any);
+          }
         }
-        return done(null, user);
-      } catch (err) {
-        return done(err as any);
-      }
-    }
-  )
-);
+      )
+    );
+  }
+}
 
 export default passport;
