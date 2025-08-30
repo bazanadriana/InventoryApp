@@ -1,6 +1,7 @@
 // apps/backend/src/routes/studioRoutes.ts
 import { Router } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -411,27 +412,24 @@ router.delete('/delete', async (req, res) => {
   if (!ids.length) return res.status(400).json({ error: 'No valid IDs provided' });
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const rules = CASCADE[model.name] ?? [];
-
-      // 1) delete children first
+  
       for (const r of rules) {
-        // @ts-ignore dynamic delegate access
+        // @ts-ignore dynamic delegate
         await tx[r.delegate].deleteMany({ where: { [r.fk]: { in: ids } } });
       }
-
-      // 2) delete parent records
-      // @ts-ignore dynamic delegate access
+  
+      // @ts-ignore dynamic delegate
       const deleted = await tx[model.delegate].deleteMany({
         where: { [model.idField!.name]: { in: ids } } as any,
       });
       return deleted;
     });
-
+  
     res.json({ ok: true, ...result });
   } catch (e: any) {
-    // Friendly FK error response
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+    if (e instanceof PrismaClientKnownRequestError && e.code === 'P2003') {
       return res.status(409).json({
         ok: false,
         error: 'Cannot delete record(s) because related records still exist.',
