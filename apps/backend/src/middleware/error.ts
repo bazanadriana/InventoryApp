@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
 
-
 export function notFound(_req: Request, res: Response) {
   res.status(404).json({ error: 'Not Found' });
 }
@@ -10,7 +9,6 @@ export function onError(err: any, _req: Request, res: Response, _next: NextFunct
   const code = err?.code ?? 'INTERNAL_ERROR';
   const message = err?.message ?? 'Unexpected error';
   if (process.env.NODE_ENV !== 'test') {
-    // eslint-disable-next-line no-console
     console.error('[ERROR]', { status, code, message, stack: err?.stack });
   }
   res.status(status).json({ error: message, code });

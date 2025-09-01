@@ -1,5 +1,4 @@
-// frontend/src/api/services/studioApi.ts
-import { api } from './api'; // you already use this in other components
+import { api } from './api'; 
 
 export type StudioModel = {
   name: string;
@@ -14,7 +13,7 @@ export type StudioModel = {
     isRequired?: boolean;
     isList?: boolean;
     isReadOnly?: boolean;
-    relationFromFields?: string[];   // ← add this
+    relationFromFields?: string[];  
   }[];
 };
 
@@ -30,7 +29,6 @@ export type RowsResp = {
 /* ----------------------------- Utils ----------------------------- */
 
 function isProbablyDateString(v: string) {
-  // Accepts things like "08/27/2025, 04:44 PM" or ISO strings
   const d = new Date(v);
   return !isNaN(d.getTime());
 }

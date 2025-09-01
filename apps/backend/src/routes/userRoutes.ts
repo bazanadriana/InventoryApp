@@ -1,4 +1,3 @@
-// apps/backend/src/routes/userRoutes.ts
 import { Router, type Request, type Response } from 'express';
 import { pool } from '../db.js';
 import { requireAuth } from '../auth/jwt.js';

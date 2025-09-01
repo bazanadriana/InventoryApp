@@ -1,4 +1,3 @@
-// apps/backend/src/routes/studioRoutes.ts
 import { Router } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';

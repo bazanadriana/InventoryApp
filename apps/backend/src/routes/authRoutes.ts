@@ -1,8 +1,7 @@
-// apps/backend/src/routes/authRoutes.ts
 import { Router, type Request, type Response } from 'express';
 import passport from 'passport';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../db.js'; // NOTE: keep .js for NodeNext/ESM builds
+import { prisma } from '../db.js'; 
 
 const router = Router();
 
@@ -11,12 +10,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const JWT_TTL = process.env.JWT_TTL || '7d';
 
 type OAuthProfile = {
-  id?: string;            // raw provider id
+  id?: string;          
   name?: string | null;
   email?: string | null;
-  image?: string | null;  // maps to User.image in Prisma schema
+  image?: string | null; 
   provider?: 'google' | 'github' | string;
-  providerId?: string;    // alias of id if your strategy sets a different field
+  providerId?: string;    
 };
 
 /**
@@ -42,7 +41,6 @@ async function issueForLocalUserAndRedirect(res: Response, profile: OAuthProfile
     },
   });
 
-  // `sub` must be the local numeric id (stringified)
   const token = jwt.sign(
     {
       sub: String(user.id),
@@ -81,7 +79,7 @@ router.get(
       provider: 'google',
       email: u?.email,
       name: u?.name,
-      image: u?.image, // make sure your strategy sets this field
+      image: u?.image, 
     };
     try {
       await issueForLocalUserAndRedirect(res, profile);
@@ -127,7 +125,6 @@ router.get(
 /* ------------------------------ Logout ------------------------------ */
 
 router.post('/logout', (_req, res) => {
-  // JWT is stateless; let the client drop it. This endpoint is here for symmetry.
   res.status(204).end();
 });
 

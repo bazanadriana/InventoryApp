@@ -1,4 +1,3 @@
-// apps/backend/src/routes/membersRoutes.ts
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
@@ -12,8 +11,6 @@ router.patch('/:id', async (req, res) => {
 
   const updated = await prisma.inventoryMember.update({
     where: { id },
-    // if your field is an enum in Prisma, this still works;
-    // if it's a string column, this is exactly right.
     data: { role: (role as any) },
   });
 

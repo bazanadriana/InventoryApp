@@ -1,4 +1,3 @@
-// frontend/src/pages/Home.tsx
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -10,7 +9,6 @@ export default function Home() {
   const startGoogle = () => { setLoading('google'); loginGoogle(); };
   const startGitHub = () => { setLoading('github'); loginGitHub(); };
 
-  // Auto-redirect if already authenticated
   if (isAuthed) return <Navigate to="/dashboard" replace />;
 
   return (

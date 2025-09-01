@@ -1,4 +1,3 @@
-// frontend/src/App.tsx
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import TopNav from './components/layout/TopNav';
 import Footer from './components/layout/Footer';
@@ -10,7 +9,6 @@ import OAuthCallback from './pages/OAuthCallback';
 import { useAuth } from './hooks/useAuth';
 import Logout from './pages/Logout';
 
-// ✅ Use the Studio **Dashboard** page (not the old Studio.tsx)
 import StudioDashboard from './pages/StudioDashboard';
 
 function RequireAuth({ children }: { children: JSX.Element }) {

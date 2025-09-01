@@ -4,11 +4,9 @@ import jwt from 'jsonwebtoken';
 
 const router = Router();
 
-// Start OAuth flows
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/github', passport.authenticate('github', { scope: ['user:email'] }));
 
-// Callbacks -> issue JWT then redirect to CLIENT_URL with token in hash
 router.get('/google/callback',
   passport.authenticate('google', { failureRedirect: '/auth/failure' }),
   (req: any, res) => {

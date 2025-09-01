@@ -1,4 +1,3 @@
-// apps/backend/src/routes/debugRoutes.ts
 import { Router } from 'express';
 const r = Router();
 

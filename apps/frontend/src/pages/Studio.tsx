@@ -1,4 +1,3 @@
-// apps/frontend/src/pages/Studio.tsx
 import { useEffect, useState } from 'react';
 import Sidebar, { type ModelKey } from '../components/layout/Sidebar';
 import Dashboard from './Dashboard';
@@ -29,7 +28,6 @@ export default function Studio() {
         setInvId('');
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

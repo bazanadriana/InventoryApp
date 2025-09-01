@@ -1,4 +1,3 @@
-// apps/backend/src/auth/jwt.ts
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
@@ -14,7 +13,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = h.slice(7);
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret') as AuthClaims;
-    (req as any).user = payload;        // <-- attach decoded claims
+    (req as any).user = payload;    
     next();
   } catch (e: any) {
     console.error('JWT verify failed:', e?.message);

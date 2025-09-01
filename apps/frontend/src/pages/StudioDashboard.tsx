@@ -1,4 +1,3 @@
-// frontend/src/pages/StudioDashboard.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { studioApi, StudioModel } from '../services/studioApi';
 import { Link, useNavigate } from 'react-router-dom';

@@ -9,11 +9,9 @@ export function useAuth() {
   const setToken = useCallback((t: string | null) => {
     setAuthToken(t);
     setTokenState(t);
-    // notify all hook instances (same tab)
     window.dispatchEvent(new CustomEvent(AUTH_CHANGED));
   }, []);
 
-  // alias kept for existing code
   const saveToken = useCallback((t: string) => setToken(t), [setToken]);
 
   const loginGoogle = useCallback(() => {
@@ -25,13 +23,10 @@ export function useAuth() {
   const logout = useCallback(() => setToken(null), [setToken]);
 
   useEffect(() => {
-    // if any request returns 401/403, clear token everywhere
     const offUnauthorized = onUnauthorized(() => setToken(null));
 
-    // keep all hook instances in sync
     const sync = () => setTokenState(getAuthToken());
     window.addEventListener(AUTH_CHANGED, sync);
-    // NOTE: native "storage" doesn't fire in the same tab; we rely on AUTH_CHANGED
 
     return () => {
       offUnauthorized();
@@ -50,7 +45,6 @@ export function useAuth() {
   };
 }
 
-/** Optional helper if you read ?token= on a page and want to persist it. */
 export function useAuthCallback() {
   useEffect(() => {
     const url = new URL(window.location.href);

@@ -21,8 +21,6 @@ export function useAutosave<T>(
           setVersion(newVersion);
         }
       } catch (e: any) {
-        // optionally surface 409 here
-        // console.error(e);
       }
     }, 8000);
     return () => clearInterval(t);

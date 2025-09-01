@@ -1,4 +1,3 @@
-// apps/backend/src/routes/fieldsRoutes.ts
 import { Router } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 

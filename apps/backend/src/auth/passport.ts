@@ -1,4 +1,3 @@
-// apps/backend/src/auth/passport.ts
 import passport, { Profile } from 'passport';
 import { PrismaClient } from '@prisma/client';
 import { Strategy as GitHubStrategy } from 'passport-github2';
@@ -25,7 +24,6 @@ async function upsertOAuthUser(_provider: 'github' | 'google', profile: Profile)
       : null;
   const name = profile.displayName || profile.username || email || `user_${profile.id}`;
 
-  // Your schema does NOT include provider/providerId → just use email to find/create
   let user = email
     ? await prisma.user.findFirst({ where: { email } })
     : null;

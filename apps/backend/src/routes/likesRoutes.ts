@@ -1,4 +1,3 @@
-// apps/backend/src/routes/likesRoutes.ts
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 

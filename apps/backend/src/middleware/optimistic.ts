@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-
 /**
  * Checks x-version header or body.version against the current version from DB.
  * If mismatch -> 409 Conflict.

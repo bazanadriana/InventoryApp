@@ -3,7 +3,7 @@ import { prisma } from '../../db/prisma';
 export async function upsertValues(itemId: number, values: Record<string, unknown>) {
   if (!values) return;
 
-  const fieldIds = Object.keys(values).map(Number); // field ids are Int
+  const fieldIds = Object.keys(values).map(Number); 
   if (!fieldIds.length) return;
 
   const fields = await prisma.customField.findMany({

@@ -1,18 +1,14 @@
-// frontend/src/services/api.ts
 import axios, { AxiosError } from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
 
-/** Always point to `/api` (avoid double slashes). */
 const RAW_BASE = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000') as string;
 const API_ROOT =
   RAW_BASE.endsWith('/api') || RAW_BASE.endsWith('/api/')
     ? RAW_BASE.replace(/\/$/, '')
     : `${RAW_BASE.replace(/\/$/, '')}/api`;
 
-/** Exported so the app can build OAuth URLs like `${API_BASE}/auth/google`. */
 export const API_BASE = API_ROOT;
 
-/** Axios instance for your backend. */
 export const api = axios.create({
   baseURL: API_BASE,
 });

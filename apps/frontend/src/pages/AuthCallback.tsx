@@ -11,7 +11,7 @@ export default function AuthCallback() {
     const t = params.get('token');
     if (t) {
       saveToken(t);
-      navigate('/dashboard', { replace: true }); // adjust destination
+      navigate('/dashboard', { replace: true }); 
     } else {
       navigate('/', { replace: true });
     }

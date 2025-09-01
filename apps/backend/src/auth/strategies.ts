@@ -1,4 +1,3 @@
-// apps/backend/src/auth/strategies.ts
 import passport from 'passport';
 import { Strategy as GoogleStrategy, type Profile as GoogleProfile } from 'passport-google-oauth20';
 import { Strategy as GitHubStrategy, type Profile as GitHubProfile } from 'passport-github2';

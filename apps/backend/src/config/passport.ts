@@ -1,4 +1,3 @@
-// src/config/passport.ts
 import passport from 'passport';
 import {
   Strategy as GoogleStrategy,
@@ -20,22 +19,17 @@ let initialized = false;
 export function configurePassport() {
   if (initialized) return;
   initialized = true;
-
-  // Prefer an explicit public API base, then Render’s public URL, then localhost:PORT
   const PORT = Number(process.env.PORT || 4000);
   const RAW_BASE =
     process.env.API_BASE_URL ||
     process.env.RENDER_EXTERNAL_URL ||
     `http://localhost:${PORT}`;
 
-  // Normalize base (remove trailing slash) and append `/api/auth/.../callback`
   const BASE = RAW_BASE.replace(/\/$/, '');
   const googleCallback = `${BASE}/api/auth/google/callback`;
   const githubCallback = `${BASE}/api/auth/github/callback`;
 
   console.log('[OAuth] Using callbacks:', { googleCallback, githubCallback });
-
-  // Helper: shape object to satisfy your Express.User (id required)
   const toExpressUser = (u: {
     provider: 'google' | 'github';
     providerId: string;
