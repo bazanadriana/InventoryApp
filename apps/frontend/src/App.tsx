@@ -10,7 +10,6 @@ import { useAuth } from './hooks/useAuth';
 import Logout from './pages/Logout';
 import StudioDashboard from './pages/StudioDashboard';
 
-
 function RequireAuth({
   children,
   requiredRole,
@@ -66,7 +65,7 @@ export default function App() {
 
           {/* Admin (requires admin role) */}
           <Route
-            path="/admin"
+            path="/admin/*" // allow /admin and any nested admin routes
             element={
               <RequireAuth requiredRole="admin">
                 <Admin />
