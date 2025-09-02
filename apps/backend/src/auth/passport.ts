@@ -1,4 +1,3 @@
-// apps/backend/src/auth/passport.ts
 import passport from 'passport';
 import { PrismaClient } from '@prisma/client';
 import { Strategy as GitHubStrategy } from 'passport-github2';
@@ -10,9 +9,19 @@ const prisma = new PrismaClient();
 
 type SafeUser = { id: number; email: string | null };
 
-passport.serializeUser(
-  (user: any, done: (err: any, id?: any) => void) => done(null, (user as any).id)
-);
+/** Build a reliable absolute base URL for callbacks (Render in prod, localhost in dev). */
+const PORT = Number(process.env.PORT ?? 4000);
+const BASE_URL =
+  process.env.BACKEND_BASE_URL?.replace(/\/+$/, '') ?? `http://localhost:${PORT}`;
+
+/** Turn relative paths into absolute URLs using BASE_URL. */
+function abs(url: string) {
+  if (/^https?:\/\//i.test(url)) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${BASE_URL}${path}`;
+}
+
+passport.serializeUser((user: any, done) => done(null, (user as any).id));
 
 passport.deserializeUser(
   async (id: number, done: (err: any, user?: SafeUser | false | null) => void) => {
@@ -50,14 +59,19 @@ async function upsertOAuthUser(
 }
 
 export function setupPassport() {
+  // --- GitHub ---
   if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+    const githubCallback = abs(
+      process.env.GITHUB_CALLBACK_URL || '/auth/github/callback'
+    );
+
     passport.use(
       new GitHubStrategy(
         {
           clientID: process.env.GITHUB_CLIENT_ID as string,
           clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-          callbackURL:
-            (process.env.GITHUB_CALLBACK_URL as string) || '/auth/github/callback',
+          callbackURL: githubCallback,
+          scope: ['user:email'],
         },
         async (
           _accessToken: string,
@@ -76,14 +90,19 @@ export function setupPassport() {
     );
   }
 
+  // --- Google ---
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    const googleCallback = abs(
+      process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback'
+    );
+
     passport.use(
       new GoogleStrategy(
         {
           clientID: process.env.GOOGLE_CLIENT_ID as string,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-          callbackURL:
-            (process.env.GOOGLE_CALLBACK_URL as string) || '/auth/google/callback',
+          callbackURL: googleCallback,
+          scope: ['profile', 'email'],
         },
         async (
           _accessToken: string,
