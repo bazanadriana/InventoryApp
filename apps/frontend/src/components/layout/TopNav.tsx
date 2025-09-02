@@ -19,7 +19,7 @@ export default function TopNav() {
     <header className="sticky top-0 z-30 border-b border-slate-200/60 dark:border-slate-800/60 backdrop-blur bg-white/70 dark:bg-slate-950/50">
       <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold">InventoryApp</span>
+        <span className="text-2xl font-bold tracking-tight text-white">InventoryApp</span>
 
           {/* Only show a single Dashboard/Admin tab when authenticated */}
           {isAuthed && (
