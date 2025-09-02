@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@prisma/client": "6.15.0",
-    "@types/cors": "^2.8.19",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -51,6 +50,7 @@
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/passport-oauth2": "^1.8.0",
     "@types/pg": "^8.15.5",
+    "@types/cors": "^2.8.19",
     "prisma": "6.15.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.1",
