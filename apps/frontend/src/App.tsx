@@ -34,8 +34,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
       <TopNav />
-      {/* Make default text white in dark mode */}
-      <main className="mx-auto max-w-6xl px-4 py-8 text-slate-900 dark:text-white">
+      <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
           <Route path="/" element={<Home />} />
 
