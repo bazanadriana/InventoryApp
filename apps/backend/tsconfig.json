@@ -11,19 +11,7 @@
     "moduleResolution": "Node",
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-
-    "types": [
-      "node",
-      "express",
-      "passport",
-      "passport-github2",
-      "passport-google-oauth20",
-      "express-session",
-      "cookie-parser",
-      "morgan",
-      "pg"
-    ]
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*", "src/types/**/*.d.ts"],
   "exclude": ["dist", "node_modules"]
