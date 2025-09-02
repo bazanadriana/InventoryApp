@@ -25,26 +25,20 @@ function RequireAuth({
 
 export default function App() {
   const { pathname } = useLocation();
-  const isStudio = pathname.startsWith('/dashboard'); // full-screen Studio view
+  const isStudio = pathname.startsWith('/dashboard');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-      {/* Hide outer nav on Studio so it doesn't duplicate Studio's own header */}
       {!isStudio && <TopNav />}
 
-      {/* Use constrained container for normal pages; Studio handles its own layout */}
       <main className={isStudio ? '' : 'mx-auto max-w-6xl px-4 py-8'}>
         <Routes>
           <Route path="/" element={<Home />} />
 
-          {/* OAuth callbacks */}
           <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route path="/auth/callback" element={<OAuthCallback />} />
-
-          {/* Instant logout route: clears auth and redirects */}
           <Route path="/logout" element={<Logout />} />
 
-          {/* /dashboard -> Prisma Studio–style page (allow nested paths) */}
           <Route
             path="/dashboard/*"
             element={
@@ -65,7 +59,7 @@ export default function App() {
 
           {/* Admin (requires admin role) */}
           <Route
-            path="/admin/*" // allow /admin and any nested admin routes
+            path="/admin/*"
             element={
               <RequireAuth requiredRole="admin">
                 <Admin />
@@ -77,7 +71,6 @@ export default function App() {
         </Routes>
       </main>
 
-      {/* Hide footer on Studio for a clean full-screen workspace */}
       {!isStudio && <Footer />}
     </div>
   );
