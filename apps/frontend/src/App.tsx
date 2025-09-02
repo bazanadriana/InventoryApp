@@ -1,33 +1,17 @@
-// apps/frontend/src/App.tsx
-import { Routes, Route, Navigate } from "react-router-dom";
-import TopNav from "./components/layout/TopNav";
+
+import { Routes, Route, Navigate } from "react-router-dom";import TopNav from "./components/layout/TopNav";
 import Footer from "./components/layout/Footer";
 import Home from "./pages/Home";
-import Inventory from "./routes/Inventory";
+import Inventory from "./routes/Inventory"; 
 import NotFound from "./routes/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import Logout from "./pages/Logout";
 import StudioDashboard from "./pages/StudioDashboard";
 import { useAuth } from "./hooks/useAuth";
 
-/** Simple auth gate */
-function RequireAuth({
-  children,
-}: {
-  children: JSX.Element;
-}) {
+function RequireAuth({ children }: { children: JSX.Element }) {
   const { isAuthed } = useAuth();
   return isAuthed ? children : <Navigate to="/" replace />;
-}
-
-/** Decides which dashboard to show based on role stored in localStorage */
-function DashboardRouter() {
-  const role =
-    (localStorage.getItem("role") || "").toLowerCase();
-  const isAdmin =
-    role === "admin" || localStorage.getItem("isAdmin") === "true";
-
-  return isAdmin ? <StudioDashboard /> : <Inventory />;
 }
 
 export default function App() {
@@ -38,17 +22,17 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
 
-          {/* Single entry point: /dashboard */}
+          {/* Single dashboard for everyone */}
           <Route
             path="/dashboard"
             element={
               <RequireAuth>
-                <DashboardRouter />
+                <StudioDashboard />
               </RequireAuth>
             }
           />
 
-          {/* Alias: keep /admin but redirect to /dashboard */}
+          {/* Keep old /admin as an alias */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
 
           {/* Auth helpers */}

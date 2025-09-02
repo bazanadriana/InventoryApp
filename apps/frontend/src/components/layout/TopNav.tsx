@@ -1,61 +1,23 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 
 export default function TopNav() {
-  const { isAuthed, logout } = useAuth();
-  const location = useLocation();
-
-  // When you're on /admin (or subpaths), label should read "Admin"
-  const onAdmin = location.pathname.startsWith("/admin");
-
-  const base =
-    "px-3 py-2 rounded-xl text-sm font-medium transition-colors";
-  const active =
-    "bg-slate-200/60 text-slate-900 dark:bg-slate-800/60 dark:text-white";
-  const idle =
-    "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/50";
+  const { isAuthed } = useAuth();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/60 dark:border-slate-800/60 backdrop-blur bg-white/70 dark:bg-slate-950/50">
-      <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
-        {/* Brand + (conditional) primary tab */}
-        <div className="flex items-center gap-3">
-          {/* Brand — bigger and always white as requested */}
-          <span className="text-2xl font-bold tracking-tight text-white">
-            InventoryApp
-          </span>
-
-          {/* Only show a single Dashboard/Admin tab when authenticated */}
+    <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur">
+      <nav className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between text-slate-100">
+        <Link to="/" className="text-xl font-semibold">InventoryApp</Link>
+        <div className="flex items-center gap-6">
+          <NavLink to="/" className={({isActive}) => isActive ? "opacity-100" : "opacity-80 hover:opacity-100"}>Home</NavLink>
           {isAuthed && (
-            <nav className="ml-2 hidden md:flex items-center gap-1">
-              <NavLink
-                to={onAdmin ? "/admin" : "/dashboard"}
-                className={({ isActive }) =>
-                  `${base} ${
-                    (onAdmin && location.pathname.startsWith("/admin")) || isActive
-                      ? active
-                      : idle
-                  }`
-                }
-              >
-                {onAdmin ? "Admin" : "Dashboard"}
-              </NavLink>
-            </nav>
+            <NavLink to="/dashboard" className={({isActive}) => isActive ? "opacity-100" : "opacity-80 hover:opacity-100"}>Dashboard</NavLink>
+          )}
+          {isAuthed && (
+            <NavLink to="/logout" className="opacity-80 hover:opacity-100">Logout</NavLink>
           )}
         </div>
-
-        {/* Right side — Logout only when authenticated (no Login link) */}
-        <div className="flex items-center gap-3">
-          {isAuthed && (
-            <button
-              onClick={logout}
-              className="px-3 py-2 rounded-xl text-sm font-medium bg-slate-900 text-white"
-            >
-              Logout
-            </button>
-          )}
-        </div>
-      </div>
+      </nav>
     </header>
   );
 }
