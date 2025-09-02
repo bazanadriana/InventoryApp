@@ -53,6 +53,7 @@ export default function StudioDashboard() {
       setModels(ms);
       if (!active && ms.length) setActive(ms[0].name);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -302,6 +303,7 @@ export default function StudioDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
+      {/* Studio-only header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="text-2xl font-semibold">InventoryApp</div>
         <nav className="flex items-center gap-6">
