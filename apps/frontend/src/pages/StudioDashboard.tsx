@@ -34,12 +34,14 @@ export default function StudioDashboard() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
 
-  // Logout (avoid /logout 404 + double click)
   const { logout } = useAuth();
   const navigate = useNavigate();
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
+  };
+  const goAdmin = () => {
+    navigate('/admin');
   };
 
   const activeModel = useMemo(
@@ -209,9 +211,6 @@ export default function StudioDashboard() {
     }
   }
 
-  /** ----------------------------------------------------------------
-   * FIX: define `commitInline` in this file so TS can find it
-   * ----------------------------------------------------------------*/
   const commitInline = async (row: any, key: string, value: any) => {
     if (!activeModel?.idField) return;
     const id = row[activeModel.idField];
@@ -310,9 +309,10 @@ export default function StudioDashboard() {
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
           </Link>
-          <Link className="hover:text-white" to="/admin">
+          {/* Force navigation out of Studio to the Admin app route */}
+          <button type="button" onClick={goAdmin} className="hover:text-white">
             Admin
-          </Link>
+          </button>
           <button onClick={handleLogout} className="hover:text-white">
             Logout
           </button>
