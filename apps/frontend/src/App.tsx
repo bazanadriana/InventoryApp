@@ -1,14 +1,13 @@
-
-import { Routes, Route, Navigate } from "react-router-dom";import TopNav from "./components/layout/TopNav";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Footer from "./components/layout/Footer";
 import Home from "./pages/Home";
-import Inventory from "./routes/Inventory"; 
 import NotFound from "./routes/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import Logout from "./pages/Logout";
 import StudioDashboard from "./pages/StudioDashboard";
 import { useAuth } from "./hooks/useAuth";
 
+/** Simple auth gate */
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { isAuthed } = useAuth();
   return isAuthed ? children : <Navigate to="/" replace />;
@@ -17,12 +16,12 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-      <TopNav />
+      {/* ⬆️ No TopNav here */}
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
           <Route path="/" element={<Home />} />
 
-          {/* Single dashboard for everyone */}
+          {/* Everyone lands on Studio dashboard after login */}
           <Route
             path="/dashboard"
             element={
@@ -32,7 +31,7 @@ export default function App() {
             }
           />
 
-          {/* Keep old /admin as an alias */}
+          {/* keep /admin as alias */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
 
           {/* Auth helpers */}
