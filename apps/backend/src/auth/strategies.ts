@@ -1,126 +1,95 @@
 import passport from 'passport';
-import { Strategy as GoogleStrategy, type Profile as GoogleProfile } from 'passport-google-oauth20';
-import { Strategy as GitHubStrategy, type Profile as GitHubProfile } from 'passport-github2';
+import { Strategy as GitHubStrategy } from 'passport-github2';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import type { Profile as PassportProfile } from 'passport';
+import type { VerifyCallback } from 'passport-oauth2';
 
-const BASE = process.env.API_BASE_URL || 'http://localhost:4000';
+/** Build absolute base + optional API prefix for OAuth callbacks. */
+const PORT = Number(process.env.PORT ?? 4000);
+const RAW_BASE =
+  process.env.BACKEND_BASE_URL ||
+  process.env.API_BASE_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  `http://localhost:${PORT}`;
+const BASE_URL = RAW_BASE.replace(/\/+$/, '');
 
-type OAuthUser = {
+const RAW_PREFIX = (process.env.API_PREFIX ?? '/api').trim();
+const API_PREFIX = RAW_PREFIX.startsWith('/') ? RAW_PREFIX : `/${RAW_PREFIX}`;
+
+const cb = (path: string) => `${BASE_URL}${API_PREFIX}${path.startsWith('/') ? path : `/${path}`}`;
+
+/** Minimal profile passed to the route; DB id is created in the callback route. */
+type MinimalPassportUser = {
+  id: string;                    // provider id (string)
   provider: 'google' | 'github';
   providerId: string;
+  email: string | null;
   name?: string | null;
-  email?: string | null;
   image?: string | null;
 };
 
-type VerifyDone = (error: any, user?: any, info?: any) => void;
+function normalize(provider: 'google' | 'github', profile: PassportProfile): MinimalPassportUser {
+  const email =
+    Array.isArray(profile.emails) && profile.emails[0]?.value ? profile.emails[0].value : null;
+  const name = (profile as any).displayName || (profile as any).username || email || undefined;
+  const image =
+    Array.isArray((profile as any).photos) && (profile as any).photos[0]?.value
+      ? (profile as any).photos[0].value
+      : null;
 
-/* ---------- Helpers ---------- */
+  return { id: profile.id, provider, providerId: profile.id, email, name, image };
+}
 
-async function fetchGithubPrimaryEmail(accessToken: string): Promise<string | null> {
-  try {
-    const res = await fetch('https://api.github.com/user/emails', {
-      headers: {
-        Authorization: `token ${accessToken}`,
-        'User-Agent': 'inventory-app',
-        Accept: 'application/vnd.github+json',
+/** Register strategies */
+if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  const githubCallback = process.env.GITHUB_CALLBACK_URL || cb('/auth/github/callback');
+
+  passport.use(
+    new GitHubStrategy(
+      {
+        clientID: process.env.GITHUB_CLIENT_ID,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        callbackURL: githubCallback,
+        scope: ['user:email'],
       },
-    });
-    if (!res.ok) return null;
-    const emails = (await res.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
-    const best =
-      emails.find(e => e.primary && e.verified) ??
-      emails.find(e => e.verified) ??
-      emails[0];
-    return best?.email ?? null;
-  } catch {
-    return null;
-  }
+      async (_at: string, _rt: string, profile: PassportProfile, done: VerifyCallback) => {
+        try {
+          const user = normalize('github', profile);
+          // Cast to any to satisfy Express.User augmentation (id:number) — we create numeric id later.
+          done(null, user as any);
+        } catch (e) {
+          done(e as any);
+        }
+      }
+    )
+  );
 }
 
-/* ---------- Feature flags (from env) ---------- */
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  const googleCallback = process.env.GOOGLE_CALLBACK_URL || cb('/auth/google/callback');
 
-const hasGoogle = !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
-const hasGitHub = !!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET;
-
-/* ---------- Configure strategies (guarded) ---------- */
-
-export function configurePassport() {
-  /* ----- Google ----- */
-  if (hasGoogle) {
-    const googleCallback =
-      process.env.GOOGLE_CALLBACK_URL || `${BASE}/auth/google/callback`;
-
-    passport.use(
-      new GoogleStrategy(
-        {
-          clientID: process.env.GOOGLE_CLIENT_ID as string,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-          callbackURL: googleCallback,
-        },
-        (
-          _accessToken: string,
-          _refreshToken: string,
-          profile: GoogleProfile,
-          done: VerifyDone
-        ) => {
-          const user: OAuthUser = {
-            provider: 'google',
-            providerId: profile.id,
-            name: profile.displayName ?? profile.name?.givenName ?? null,
-            email: profile.emails?.[0]?.value ?? null,
-            image: profile.photos?.[0]?.value ?? null,
-          };
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: googleCallback,
+        scope: ['profile', 'email'],
+      },
+      async (_at: string, _rt: string, profile: PassportProfile, done: VerifyCallback) => {
+        try {
+          const user = normalize('google', profile);
           done(null, user as any);
+        } catch (e) {
+          done(e as any);
         }
-      )
-    );
-  } else {
-    console.warn('Google OAuth disabled: missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');
-  }
-
-  /* ----- GitHub ----- */
-  if (hasGitHub) {
-    const githubCallback =
-      process.env.GITHUB_CALLBACK_URL || `${BASE}/auth/github/callback`;
-
-    passport.use(
-      new GitHubStrategy(
-        {
-          clientID: process.env.GITHUB_CLIENT_ID as string,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-          callbackURL: githubCallback,
-          scope: ['user:email'],
-        },
-        async (
-          accessToken: string,
-          _refreshToken: string,
-          profile: GitHubProfile,
-          done: VerifyDone
-        ) => {
-          // GitHub may omit emails even with scope → fetch explicitly
-          let email: string | null = (profile.emails && profile.emails[0]?.value) ?? null;
-          if (!email) email = await fetchGithubPrimaryEmail(accessToken);
-
-          const user: OAuthUser = {
-            provider: 'github',
-            providerId: profile.id,
-            name: profile.displayName ?? (profile as any).username ?? null,
-            email,
-            image: profile.photos?.[0]?.value ?? null,
-          };
-          done(null, user as any);
-        }
-      )
-    );
-  } else {
-    console.warn('GitHub OAuth disabled: missing GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET');
-  }
+      }
+    )
+  );
 }
 
-/* Auto-configure on import for backward compatibility */
-configurePassport();
-
-/* Export flags so routes/UI can reflect availability if needed */
-export const oauthEnabled = { google: hasGoogle, github: hasGitHub };
-
-export default passport;
+/** Optional logs to confirm callbacks in Render */
+console.log('[auth] BASE_URL:', BASE_URL);
+console.log('[auth] API_PREFIX:', API_PREFIX);
+console.log('[auth] Google callback:', process.env.GOOGLE_CALLBACK_URL || cb('/auth/google/callback'));
+console.log('[auth] GitHub  callback:', process.env.GITHUB_CALLBACK_URL || cb('/auth/github/callback'));
