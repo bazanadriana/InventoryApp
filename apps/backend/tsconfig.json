@@ -4,6 +4,7 @@
     "module": "CommonJS",
     "rootDir": "src",
     "outDir": "dist",
+
     "strict": true,
     "noImplicitAny": true,
     "esModuleInterop": true,
@@ -11,7 +12,18 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node", "express"]
+
+    "types": [
+      "node",
+      "express",
+      "passport",
+      "passport-github2",
+      "passport-google-oauth20",
+      "express-session",
+      "cookie-parser",
+      "morgan",
+      "pg"
+    ]
   },
   "include": ["src/**/*", "src/types/**/*.d.ts"],
   "exclude": ["dist", "node_modules"]
