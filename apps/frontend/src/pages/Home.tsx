@@ -25,7 +25,6 @@ export default function Home() {
     try {
       setError(null);
       setLoading("github");
-      // Usually this will redirect the page immediately.
       loginGitHub();
     } catch (e) {
       setLoading(null);
@@ -37,8 +36,10 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-gray-100">
       <main className="flex flex-1 flex-col items-center justify-center px-4">
-        <h1 className="text-3xl font-semibold tracking-tight">Inventory App</h1>
-        <p className="mt-3 text-gray-400">
+        <h1 className="text-3xl font-semibold tracking-tight text-white">
+          Inventory App
+        </h1>
+        <p className="mt-3 text-gray-300">
           Sign in to access your dashboard and inventories.
         </p>
 
@@ -50,7 +51,7 @@ export default function Home() {
             disabled={loading !== null}
             aria-busy={loading === "github"}
             className="group inline-flex items-center gap-3 rounded-md border border-white/30 px-6 py-4 text-lg font-medium tracking-tight
-                       hover:border-white/60 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                       hover:border-white/60 disabled:opacity-60 disabled:cursor-not-allowed transition text-white"
             aria-label="Sign in with GitHub"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
@@ -70,12 +71,12 @@ export default function Home() {
             disabled={loading !== null}
             aria-busy={loading === "google"}
             className="group inline-flex items-center gap-3 rounded-md border border-white/30 px-6 py-4 text-lg font-medium tracking-tight
-                       hover:border-white/60 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                       hover:border-white/60 disabled:opacity-60 disabled:cursor-not-allowed transition text-white"
             aria-label="Sign in with Google"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
               {loading === "google" ? (
-                <SpinnerIcon className="h-5 w-5" />
+                <SpinnerIcon className="h-5 w-5 text-white" />
               ) : (
                 <GoogleIcon className="h-5 w-5" />
               )}
@@ -134,11 +135,7 @@ function GitHubIcon({ className = "h-5 w-5" }: { className?: string }) {
 
 function SpinnerIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={`${className} animate-spin`}
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={`${className} animate-spin`}>
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.25" />
       <path d="M22 12a10 10 0 0 0-10-10" fill="none" stroke="currentColor" strokeWidth="4" />
     </svg>

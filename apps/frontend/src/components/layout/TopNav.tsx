@@ -5,7 +5,7 @@ export default function TopNav() {
   const { isAuthed, logout } = useAuth();
   const location = useLocation();
 
-  // If you're on /admin (or subpaths), the single tab should read "Admin"
+  // When you’re on /admin (or subpaths), label should read “Admin”
   const onAdmin = location.pathname.startsWith("/admin");
 
   const base =
@@ -21,22 +21,13 @@ export default function TopNav() {
         <div className="flex items-center gap-3">
           <span className="text-lg font-semibold">InventoryApp</span>
 
-          {/* Primary nav (no permanent Admin item) */}
-          <nav className="ml-2 hidden md:flex items-center gap-1">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) => `${base} ${isActive ? active : idle}`}
-            >
-              Home
-            </NavLink>
-
-            {isAuthed && (
+          {/* Only show a single Dashboard/Admin tab when authenticated */}
+          {isAuthed && (
+            <nav className="ml-2 hidden md:flex items-center gap-1">
               <NavLink
                 to={onAdmin ? "/admin" : "/dashboard"}
                 className={({ isActive }) =>
                   `${base} ${
-                    // treat /admin as active even though "to" toggles
                     (onAdmin && location.pathname.startsWith("/admin")) || isActive
                       ? active
                       : idle
@@ -45,22 +36,19 @@ export default function TopNav() {
               >
                 {onAdmin ? "Admin" : "Dashboard"}
               </NavLink>
-            )}
-          </nav>
+            </nav>
+          )}
         </div>
 
+        {/* Remove Login when logged out; show only Logout for authed users */}
         <div className="flex items-center gap-3">
-          {isAuthed ? (
+          {isAuthed && (
             <button
               onClick={logout}
               className="px-3 py-2 rounded-xl text-sm font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900"
             >
               Logout
             </button>
-          ) : (
-            <NavLink to="/login" className={`${base} ${idle}`}>
-              Login
-            </NavLink>
           )}
         </div>
       </div>
