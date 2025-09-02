@@ -1,4 +1,6 @@
+// apps/frontend/src/App.tsx
 import { Routes, Route, Navigate } from "react-router-dom";
+import Login from "./routes/Login";
 import Footer from "./components/layout/Footer";
 import Home from "./pages/Home";
 import NotFound from "./routes/NotFound";
@@ -10,7 +12,7 @@ import { useAuth } from "./hooks/useAuth";
 /** Simple auth gate */
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { isAuthed } = useAuth();
-  return isAuthed ? children : <Navigate to="/" replace />;
+  return isAuthed ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -19,9 +21,18 @@ export default function App() {
       {/* ⬆️ No TopNav here */}
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
+          {/* Public */}
           <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          {/* handy aliases */}
+          <Route path="/signin" element={<Navigate to="/login" replace />} />
+          <Route path="/auth" element={<Navigate to="/login" replace />} />
 
-          {/* Everyone lands on Studio dashboard after login */}
+          {/* OAuth helpers */}
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
+          <Route path="/logout" element={<Logout />} />
+
+          {/* App */}
           <Route
             path="/dashboard"
             element={
@@ -30,13 +41,8 @@ export default function App() {
               </RequireAuth>
             }
           />
-
           {/* keep /admin as alias */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
-
-          {/* Auth helpers */}
-          <Route path="/oauth/callback" element={<OAuthCallback />} />
-          <Route path="/logout" element={<Logout />} />
 
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
