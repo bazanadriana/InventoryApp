@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function TopNav() {
@@ -10,12 +10,18 @@ export default function TopNav() {
   const onAdmin = pathname.startsWith('/admin');
 
   const itemBase = 'text-slate-200 hover:text-white transition';
-  const pillBtn = 'rounded-md border border-white/20 px-3 py-1.5 text-sm text-white hover:bg-white/10';
+  const pillBtn =
+    'rounded-md border border-white/20 px-3 py-1.5 text-sm text-white hover:bg-white/10';
+
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `${itemBase} ${isActive ? 'text-white font-medium' : ''}`;
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800/40 bg-slate-900/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link to="/" className="text-white font-semibold">InventoryApp</Link>
+        <Link to="/" className="text-white font-semibold">
+          InventoryApp
+        </Link>
 
         <nav className="flex items-center gap-4">
           {/* Home page: hide Home/Logout, show neutral word */}
@@ -24,10 +30,12 @@ export default function TopNav() {
           ) : isAuthed && onDashboard ? (
             /* Dashboard page: Dashboard · Admin · Logout */
             <>
-              <span className="text-white font-medium">Dashboard</span>
-              <Link to="/admin" className={itemBase}>
+              <span className="text-white font-medium" aria-current="page">
+                Dashboard
+              </span>
+              <NavLink to="/admin" className={navLinkClass}>
                 Admin
-              </Link>
+              </NavLink>
               <Link to="/logout" className={pillBtn}>
                 Logout
               </Link>
@@ -37,27 +45,19 @@ export default function TopNav() {
             <>
               {/* Show Home link when not already on Home */}
               {!onHome && (
-                <Link to="/" className={itemBase}>
+                <NavLink to="/" className={navLinkClass}>
                   Home
-                </Link>
+                </NavLink>
               )}
 
               {isAuthed && (
                 <>
-                  <Link
-                    to="/dashboard"
-                    className={`${itemBase} ${onDashboard ? 'text-white font-medium' : ''}`}
-                    aria-current={onDashboard ? 'page' : undefined}
-                  >
+                  <NavLink to="/dashboard" className={navLinkClass} end={false}>
                     Dashboard
-                  </Link>
-                  <Link
-                    to="/admin"
-                    className={`${itemBase} ${onAdmin ? 'text-white font-medium' : ''}`}
-                    aria-current={onAdmin ? 'page' : undefined}
-                  >
+                  </NavLink>
+                  <NavLink to="/admin" className={navLinkClass} end={false}>
                     Admin
-                  </Link>
+                  </NavLink>
                   <Link to="/logout" className={pillBtn}>
                     Logout
                   </Link>
@@ -76,4 +76,3 @@ export default function TopNav() {
     </header>
   );
 }
-
