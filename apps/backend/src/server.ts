@@ -15,7 +15,7 @@ import commentsRoutes from './routes/commentsRoutes';
 import likesRoutes from './routes/likesRoutes';
 import { initFTS } from './search/pgFullText';
 
-import './auth/strategies.js';
+import './auth/strategies.js';           // registers passport strategies
 import authRoutes from './routes/authRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -27,7 +27,11 @@ import { requireAuth } from './middleware/requireAuth.js';
 const app = express();
 
 const PORT = Number(process.env.PORT ?? 4000);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_ORIGIN =
+  (process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173').replace(
+    /\/+$/,
+    ''
+  );
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 const NETLIFY_URL = process.env.NETLIFY_URL ? `https://${process.env.NETLIFY_URL}` : undefined;
 
@@ -35,7 +39,7 @@ app.set('trust proxy', 1);
 
 /* ----------------------------- CORS ----------------------------- */
 const allowlist = new Set<string>([
-  FRONTEND_URL,
+  FRONTEND_ORIGIN,
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]);
@@ -44,9 +48,9 @@ if (NETLIFY_URL) allowlist.add(NETLIFY_URL);
 
 const corsOptions: cors.CorsOptions = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true);      // same-origin / curl
+    if (!origin) return cb(null, true); // same-origin / curl
     if (allowlist.has(origin)) return cb(null, true);
-    return cb(null, false);                   // not allowed by CORS
+    return cb(null, false);             // not allowed by CORS
   },
   credentials: false,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
@@ -54,14 +58,12 @@ const corsOptions: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptions));
-// ❌ Express 5 no longer supports string "*" in routes
-// app.options('*', cors(corsOptions));
-// ✅ Use a RegExp to match all paths for preflight
+// Preflight for all paths
 app.options(/.*/, cors(corsOptions));
 
 /* -------------------------- Middleware -------------------------- */
 app.use(helmet());
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(cookieParser());
 app.use(passport.initialize());
@@ -69,12 +71,15 @@ app.use(passport.initialize());
 /* ------------------------ Health & Alias ------------------------ */
 app.get('/api/health', (_req, res) => res.send('ok'));
 
+// Back-compat: /auth -> /api/auth
 app.use('/auth', (req, res) => {
   res.redirect(307, `/api/auth${req.url}`);
 });
 
 /* ---------------------------- Routes ---------------------------- */
-app.use('/api/auth', authRoutes);
+// IMPORTANT: Mount auth router at /api (router defines /auth/* inside)
+app.use('/api', authRoutes);
+
 app.use('/api/inventories', inventoryRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/stats', statsRoutes);
@@ -83,6 +88,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/studio', requireAuth, studioRoutes);
 
 initFTS().catch(console.error);
+
 app.use('/api', searchRoutes);
 app.use('/api', itemsRoutes);
 app.use('/api', fieldsRoutes);
@@ -101,4 +107,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(PORT, () => {
   console.log('API listening on', PORT);
   console.log('CORS allowed:', [...allowlist].join(', '));
+  console.log('Auth endpoints:');
+  console.log('  GET /api/auth/google');
+  console.log('  GET /api/auth/github');
 });
