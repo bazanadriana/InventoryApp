@@ -1,55 +1,42 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import TopNav from './components/layout/TopNav';
-import Footer from './components/layout/Footer';
-import Home from './pages/Home';
-import Inventory from './routes/Inventory';
-import Admin from './pages/AdminPage';
-import NotFound from './routes/NotFound';
-import OAuthCallback from './pages/OAuthCallback';
-import { useAuth } from './hooks/useAuth';
-import Logout from './pages/Logout';
-import StudioDashboard from './pages/StudioDashboard';
+import { Routes, Route, Navigate } from "react-router-dom";
+import TopNav from "./components/layout/TopNav";
+import Footer from "./components/layout/Footer";
+import Home from "./pages/Home";
+import Inventory from "./routes/Inventory";
+import NotFound from "./routes/NotFound";
+import OAuthCallback from "./pages/OAuthCallback";
+import Logout from "./pages/Logout";
+import StudioDashboard from "./pages/StudioDashboard";
+import { useAuth } from "./hooks/useAuth";
 
 function RequireAuth({
   children,
   requiredRole,
 }: {
   children: JSX.Element;
-  requiredRole?: 'admin' | 'user';
+  requiredRole?: "admin" | "user";
 }) {
-  const { isAuthed, user } = useAuth() as { isAuthed: boolean; user?: { role?: string } };
+  const { isAuthed } = useAuth();
   if (!isAuthed) return <Navigate to="/" replace />;
-  if (requiredRole && user?.role !== requiredRole) return <Navigate to="/" replace />;
+
+  // Optional lightweight role check from localStorage if you store it there.
+  if (requiredRole === "admin") {
+    const role = localStorage.getItem("role");
+    if (role !== "admin") return <Navigate to="/dashboard" replace />;
+  }
   return children;
 }
 
 export default function App() {
-  const { pathname } = useLocation();
-  const isStudio = pathname.startsWith('/dashboard');
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-      {!isStudio && <TopNav />}
-
-      <main className={isStudio ? '' : 'mx-auto max-w-6xl px-4 py-8'}>
+      <TopNav />
+      <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
           <Route path="/" element={<Home />} />
 
-          <Route path="/oauth/callback" element={<OAuthCallback />} />
-          <Route path="/auth/callback" element={<OAuthCallback />} />
-          <Route path="/logout" element={<Logout />} />
-
           <Route
-            path="/dashboard/*"
-            element={
-              <RequireAuth>
-                <StudioDashboard />
-              </RequireAuth>
-            }
-          />
-
-          <Route
-            path="/inventory/:id"
+            path="/dashboard"
             element={
               <RequireAuth>
                 <Inventory />
@@ -57,21 +44,21 @@ export default function App() {
             }
           />
 
-          {/* Admin (requires admin role) */}
           <Route
-            path="/admin/*"
+            path="/admin"
             element={
               <RequireAuth requiredRole="admin">
-                <Admin />
+                <StudioDashboard />
               </RequireAuth>
             }
           />
 
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
+          <Route path="/logout" element={<Logout />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
-
-      {!isStudio && <Footer />}
+      <Footer />
     </div>
   );
 }
