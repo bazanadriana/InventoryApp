@@ -5,9 +5,10 @@ export default function TopNav() {
   const { isAuthed, logout } = useAuth();
   const location = useLocation();
 
+  // If you're on /admin (or subpaths), the single tab should read "Admin"
   const onAdmin = location.pathname.startsWith("/admin");
 
-  const baseLink =
+  const base =
     "px-3 py-2 rounded-xl text-sm font-medium transition-colors";
   const active =
     "bg-slate-200/60 text-slate-900 dark:bg-slate-800/60 dark:text-white";
@@ -20,13 +21,12 @@ export default function TopNav() {
         <div className="flex items-center gap-3">
           <span className="text-lg font-semibold">InventoryApp</span>
 
+          {/* Primary nav (no permanent Admin item) */}
           <nav className="ml-2 hidden md:flex items-center gap-1">
             <NavLink
               to="/"
-              className={({ isActive }) =>
-                `${baseLink} ${isActive ? active : idle}`
-              }
               end
+              className={({ isActive }) => `${base} ${isActive ? active : idle}`}
             >
               Home
             </NavLink>
@@ -35,7 +35,8 @@ export default function TopNav() {
               <NavLink
                 to={onAdmin ? "/admin" : "/dashboard"}
                 className={({ isActive }) =>
-                  `${baseLink} ${
+                  `${base} ${
+                    // treat /admin as active even though "to" toggles
                     (onAdmin && location.pathname.startsWith("/admin")) || isActive
                       ? active
                       : idle
@@ -57,7 +58,7 @@ export default function TopNav() {
               Logout
             </button>
           ) : (
-            <NavLink to="/login" className={`${baseLink} ${idle}`}>
+            <NavLink to="/login" className={`${base} ${idle}`}>
               Login
             </NavLink>
           )}

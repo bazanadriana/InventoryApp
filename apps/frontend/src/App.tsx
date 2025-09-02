@@ -9,6 +9,7 @@ import Logout from "./pages/Logout";
 import StudioDashboard from "./pages/StudioDashboard";
 import { useAuth } from "./hooks/useAuth";
 
+/** Simple auth/role gate */
 function RequireAuth({
   children,
   requiredRole,
@@ -17,13 +18,15 @@ function RequireAuth({
   requiredRole?: "admin" | "user";
 }) {
   const { isAuthed } = useAuth();
+
   if (!isAuthed) return <Navigate to="/" replace />;
 
-  // Optional lightweight role check from localStorage if you store it there.
+  // Optional role check (only if you store role in localStorage)
   if (requiredRole === "admin") {
     const role = localStorage.getItem("role");
     if (role !== "admin") return <Navigate to="/dashboard" replace />;
   }
+
   return children;
 }
 
@@ -35,6 +38,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
 
+          {/* Regular user dashboard */}
           <Route
             path="/dashboard"
             element={
@@ -44,6 +48,7 @@ export default function App() {
             }
           />
 
+          {/* Admin studio */}
           <Route
             path="/admin"
             element={
@@ -53,8 +58,11 @@ export default function App() {
             }
           />
 
+          {/* Auth helpers */}
           <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route path="/logout" element={<Logout />} />
+
+          {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
