@@ -9,17 +9,14 @@ const prisma = new PrismaClient();
 
 type SafeUser = { id: number; email: string | null };
 
-/** Build a reliable absolute base URL for callbacks (Render in prod, localhost in dev). */
+/** Build absolute base + optional API prefix for OAuth callbacks. */
 const PORT = Number(process.env.PORT ?? 4000);
-const BASE_URL =
-  process.env.BACKEND_BASE_URL?.replace(/\/+$/, '') ?? `http://localhost:${PORT}`;
+const BASE_URL = (process.env.BACKEND_BASE_URL ?? `http://localhost:${PORT}`).replace(/\/+$/, '');
+const API_PREFIX_RAW = (process.env.API_PREFIX ?? '').trim();
+const API_PREFIX = API_PREFIX_RAW ? (API_PREFIX_RAW.startsWith('/') ? API_PREFIX_RAW : `/${API_PREFIX_RAW}`) : '';
 
-/** Turn relative paths into absolute URLs using BASE_URL. */
-function abs(url: string) {
-  if (/^https?:\/\//i.test(url)) return url;
-  const path = url.startsWith('/') ? url : `/${url}`;
-  return `${BASE_URL}${path}`;
-}
+/** Create absolute callback URLs with API prefix baked in. */
+const cb = (path: string) => `${BASE_URL}${API_PREFIX}${path.startsWith('/') ? path : `/${path}`}`;
 
 passport.serializeUser((user: any, done) => done(null, (user as any).id));
 
@@ -50,27 +47,20 @@ async function upsertOAuthUser(
     `user_${profile.id}`;
 
   let user = email ? await prisma.user.findFirst({ where: { email } }) : null;
-
-  if (!user) {
-    user = await prisma.user.create({ data: { email, name } as any });
-  }
+  if (!user) user = await prisma.user.create({ data: { email, name } as any });
 
   return { id: user.id, email: user.email } as SafeUser;
 }
 
-export function setupPassport() {
+export function setupPassport(): void {
   // --- GitHub ---
   if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
-    const githubCallback = abs(
-      process.env.GITHUB_CALLBACK_URL || '/auth/github/callback'
-    );
-
     passport.use(
       new GitHubStrategy(
         {
-          clientID: process.env.GITHUB_CLIENT_ID as string,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-          callbackURL: githubCallback,
+          clientID: process.env.GITHUB_CLIENT_ID,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          callbackURL: process.env.GITHUB_CALLBACK_URL || cb('/auth/github/callback'),
           scope: ['user:email'],
         },
         async (
@@ -78,12 +68,12 @@ export function setupPassport() {
           _refreshToken: string,
           profile: PassportProfile,
           done: VerifyCallback
-        ) => {
+        ): Promise<void> => {
           try {
             const user = await upsertOAuthUser('github', profile);
-            return done(null, user);
+            done(null, user);
           } catch (e) {
-            return done(e as any);
+            done(e as any);
           }
         }
       )
@@ -92,16 +82,12 @@ export function setupPassport() {
 
   // --- Google ---
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    const googleCallback = abs(
-      process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback'
-    );
-
     passport.use(
       new GoogleStrategy(
         {
-          clientID: process.env.GOOGLE_CLIENT_ID as string,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-          callbackURL: googleCallback,
+          clientID: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: process.env.GOOGLE_CALLBACK_URL || cb('/auth/google/callback'),
           scope: ['profile', 'email'],
         },
         async (
@@ -109,12 +95,12 @@ export function setupPassport() {
           _refreshToken: string,
           profile: PassportProfile,
           done: VerifyCallback
-        ) => {
+        ): Promise<void> => {
           try {
             const user = await upsertOAuthUser('google', profile);
-            return done(null, user);
+            done(null, user);
           } catch (e) {
-            return done(e as any);
+            done(e as any);
           }
         }
       )
