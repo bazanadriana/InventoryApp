@@ -1,16 +1,30 @@
+// apps/frontend/src/services/api.ts
 import axios, { AxiosError } from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
 
-const RAW_BASE = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000') as string;
-const API_ROOT =
-  RAW_BASE.endsWith('/api') || RAW_BASE.endsWith('/api/')
-    ? RAW_BASE.replace(/\/$/, '')
-    : `${RAW_BASE.replace(/\/$/, '')}/api`;
+/**
+ * BACKEND BASE URL STRATEGY
+ * - Prefer VITE_API_URL (e.g., https://your-backend.onrender.com)
+ * - Otherwise fall back to the current origin (useful if you proxy /api via Netlify)
+ * - Ensure the final base ends with /api
+ *
+ * Netlify: set VITE_API_URL in Site Settings, or add a netlify.toml proxy for /api.
+ */
+const ENV_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const ORIGIN_BASE =
+  typeof window !== 'undefined' && window.location ? window.location.origin : '';
 
-export const API_BASE = API_ROOT;
+const RAW_BASE = ENV_BASE && ENV_BASE.length > 0 ? ENV_BASE : ORIGIN_BASE;
+
+const NORMALIZED = RAW_BASE.replace(/\/$/, '');
+export const API_BASE = /\/api$/.test(NORMALIZED)
+  ? NORMALIZED
+  : `${NORMALIZED}/api`;
 
 export const api = axios.create({
   baseURL: API_BASE,
+  // If you rely on cookies/SameSite=None, uncomment:
+  // withCredentials: true,
 });
 
 /* ---------------- Token helpers ---------------- */
