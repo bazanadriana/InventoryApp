@@ -1,39 +1,52 @@
-import passport, { Profile } from 'passport';
+// apps/backend/src/auth/passport.ts
+import passport from 'passport';
 import { PrismaClient } from '@prisma/client';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import type { VerifyCallback } from 'passport-oauth2';
+import type { Profile as PassportProfile } from 'passport';
 
 const prisma = new PrismaClient();
 
 type SafeUser = { id: number; email: string | null };
 
-passport.serializeUser((user: any, done) => done(null, user.id));
-passport.deserializeUser(async (id: number, done) => {
-  try {
-    const u = await prisma.user.findUnique({ where: { id } });
-    done(null, u ? ({ id: u.id, email: u.email } as SafeUser) : false);
-  } catch (e) {
-    done(e as any);
-  }
-});
+passport.serializeUser(
+  (user: any, done: (err: any, id?: any) => void) => done(null, (user as any).id)
+);
 
-async function upsertOAuthUser(_provider: 'github' | 'google', profile: Profile) {
+passport.deserializeUser(
+  async (id: number, done: (err: any, user?: SafeUser | false | null) => void) => {
+    try {
+      const u = await prisma.user.findUnique({ where: { id } });
+      done(null, u ? ({ id: u.id, email: u.email } as SafeUser) : false);
+    } catch (e) {
+      done(e as any);
+    }
+  }
+);
+
+async function upsertOAuthUser(
+  _provider: 'github' | 'google',
+  profile: PassportProfile
+): Promise<SafeUser> {
   const email =
-    Array.isArray(profile.emails) && profile.emails[0]?.value
+    Array.isArray(profile.emails) && profile.emails?.[0]?.value
       ? profile.emails[0].value
       : null;
-  const name = profile.displayName || profile.username || email || `user_${profile.id}`;
 
-  let user = email
-    ? await prisma.user.findFirst({ where: { email } })
-    : null;
+  const name =
+    (profile as any).displayName ||
+    (profile as any).username ||
+    email ||
+    `user_${profile.id}`;
+
+  let user = email ? await prisma.user.findFirst({ where: { email } }) : null;
 
   if (!user) {
-    user = await prisma.user.create({
-      data: { email, name } as any,
-    });
+    user = await prisma.user.create({ data: { email, name } as any });
   }
-  return user;
+
+  return { id: user.id, email: user.email } as SafeUser;
 }
 
 export function setupPassport() {
@@ -41,19 +54,20 @@ export function setupPassport() {
     passport.use(
       new GitHubStrategy(
         {
-          clientID: process.env.GITHUB_CLIENT_ID,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET,
-          callbackURL: process.env.GITHUB_CALLBACK_URL || '/auth/github/callback',
+          clientID: process.env.GITHUB_CLIENT_ID as string,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+          callbackURL:
+            (process.env.GITHUB_CALLBACK_URL as string) || '/auth/github/callback',
         },
         async (
-          accessToken: string,
-          refreshToken: string,
-          profile: Profile,
-          done: (err: any, user?: any) => void
+          _accessToken: string,
+          _refreshToken: string,
+          profile: PassportProfile,
+          done: VerifyCallback
         ) => {
           try {
             const user = await upsertOAuthUser('github', profile);
-            return done(null, { id: user.id, email: user.email } as SafeUser);
+            return done(null, user);
           } catch (e) {
             return done(e as any);
           }
@@ -66,19 +80,20 @@ export function setupPassport() {
     passport.use(
       new GoogleStrategy(
         {
-          clientID: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
+          clientID: process.env.GOOGLE_CLIENT_ID as string,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+          callbackURL:
+            (process.env.GOOGLE_CALLBACK_URL as string) || '/auth/google/callback',
         },
         async (
-          accessToken: string,
-          refreshToken: string,
-          profile: Profile,
-          done: (err: any, user?: any) => void
+          _accessToken: string,
+          _refreshToken: string,
+          profile: PassportProfile,
+          done: VerifyCallback
         ) => {
           try {
             const user = await upsertOAuthUser('google', profile);
-            return done(null, { id: user.id, email: user.email } as SafeUser);
+            return done(null, user);
           } catch (e) {
             return done(e as any);
           }
