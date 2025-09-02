@@ -5,7 +5,7 @@ export default function TopNav() {
   const { isAuthed, logout } = useAuth();
   const location = useLocation();
 
-  // When you’re on /admin (or subpaths), label should read “Admin”
+  // When you're on /admin (or subpaths), label should read "Admin"
   const onAdmin = location.pathname.startsWith("/admin");
 
   const base =
@@ -18,8 +18,12 @@ export default function TopNav() {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/60 dark:border-slate-800/60 backdrop-blur bg-white/70 dark:bg-slate-950/50">
       <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
+        {/* Brand + (conditional) primary tab */}
         <div className="flex items-center gap-3">
-        <span className="text-2xl font-bold tracking-tight text-white">InventoryApp</span>
+          {/* Brand — bigger and always white as requested */}
+          <span className="text-2xl font-bold tracking-tight text-white">
+            InventoryApp
+          </span>
 
           {/* Only show a single Dashboard/Admin tab when authenticated */}
           {isAuthed && (
@@ -40,12 +44,12 @@ export default function TopNav() {
           )}
         </div>
 
-        {/* Remove Login when logged out; show only Logout for authed users */}
+        {/* Right side — Logout only when authenticated (no Login link) */}
         <div className="flex items-center gap-3">
           {isAuthed && (
             <button
               onClick={logout}
-              className="px-3 py-2 rounded-xl text-sm font-medium bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+              className="px-3 py-2 rounded-xl text-sm font-medium bg-slate-900 text-white"
             >
               Logout
             </button>
