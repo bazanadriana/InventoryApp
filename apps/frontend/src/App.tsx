@@ -3,7 +3,7 @@ import TopNav from './components/layout/TopNav';
 import Footer from './components/layout/Footer';
 import Home from './pages/Home';
 import Inventory from './routes/Inventory';
-import Admin from './pages/AdminPage'; 
+import Admin from './pages/AdminPage';
 import NotFound from './routes/NotFound';
 import OAuthCallback from './pages/OAuthCallback';
 import { useAuth } from './hooks/useAuth';
