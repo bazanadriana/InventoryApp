@@ -3,17 +3,25 @@ import TopNav from './components/layout/TopNav';
 import Footer from './components/layout/Footer';
 import Home from './pages/Home';
 import Inventory from './routes/Inventory';
-import Admin from './routes/Admin';
+import Admin from './pages/Admin';
 import NotFound from './routes/NotFound';
 import OAuthCallback from './pages/OAuthCallback';
 import { useAuth } from './hooks/useAuth';
 import Logout from './pages/Logout';
-
 import StudioDashboard from './pages/StudioDashboard';
 
-function RequireAuth({ children }: { children: JSX.Element }) {
-  const { isAuthed } = useAuth();
-  return isAuthed ? children : <Navigate to="/" replace />;
+
+function RequireAuth({
+  children,
+  requiredRole,
+}: {
+  children: JSX.Element;
+  requiredRole?: 'admin' | 'user';
+}) {
+  const { isAuthed, user } = useAuth() as { isAuthed: boolean; user?: { role?: string } };
+  if (!isAuthed) return <Navigate to="/" replace />;
+  if (requiredRole && user?.role !== requiredRole) return <Navigate to="/" replace />;
+  return children;
 }
 
 export default function App() {
@@ -56,10 +64,11 @@ export default function App() {
             }
           />
 
+          {/* Admin (requires admin role) */}
           <Route
             path="/admin"
             element={
-              <RequireAuth>
+              <RequireAuth requiredRole="admin">
                 <Admin />
               </RequireAuth>
             }
