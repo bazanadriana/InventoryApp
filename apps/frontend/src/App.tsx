@@ -1,3 +1,4 @@
+// apps/frontend/src/App.tsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import TopNav from "./components/layout/TopNav";
 import Footer from "./components/layout/Footer";
@@ -9,25 +10,24 @@ import Logout from "./pages/Logout";
 import StudioDashboard from "./pages/StudioDashboard";
 import { useAuth } from "./hooks/useAuth";
 
-/** Simple auth/role gate */
+/** Simple auth gate */
 function RequireAuth({
   children,
-  requiredRole,
 }: {
   children: JSX.Element;
-  requiredRole?: "admin" | "user";
 }) {
   const { isAuthed } = useAuth();
+  return isAuthed ? children : <Navigate to="/" replace />;
+}
 
-  if (!isAuthed) return <Navigate to="/" replace />;
+/** Decides which dashboard to show based on role stored in localStorage */
+function DashboardRouter() {
+  const role =
+    (localStorage.getItem("role") || "").toLowerCase();
+  const isAdmin =
+    role === "admin" || localStorage.getItem("isAdmin") === "true";
 
-  // Optional role check (only if you store role in localStorage)
-  if (requiredRole === "admin") {
-    const role = localStorage.getItem("role");
-    if (role !== "admin") return <Navigate to="/dashboard" replace />;
-  }
-
-  return children;
+  return isAdmin ? <StudioDashboard /> : <Inventory />;
 }
 
 export default function App() {
@@ -38,25 +38,18 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
 
-          {/* Regular user dashboard */}
+          {/* Single entry point: /dashboard */}
           <Route
             path="/dashboard"
             element={
               <RequireAuth>
-                <Inventory />
+                <DashboardRouter />
               </RequireAuth>
             }
           />
 
-          {/* Admin studio */}
-          <Route
-            path="/admin"
-            element={
-              <RequireAuth requiredRole="admin">
-                <StudioDashboard />
-              </RequireAuth>
-            }
-          />
+          {/* Alias: keep /admin but redirect to /dashboard */}
+          <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
 
           {/* Auth helpers */}
           <Route path="/oauth/callback" element={<OAuthCallback />} />
