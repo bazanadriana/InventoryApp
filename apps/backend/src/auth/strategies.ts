@@ -1,167 +1,90 @@
-// apps/backend/src/auth/strategies.ts
 import passport from 'passport';
-import { Strategy as GitHubStrategy } from 'passport-github2';
-import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
-import type { Profile as PassportProfile } from 'passport';
+import { Strategy as GoogleStrategy, Profile as GoogleProfile } from 'passport-google-oauth20';
+import { Strategy as GitHubStrategy, Profile as GitHubProfile } from 'passport-github2';
 import type { VerifyCallback } from 'passport-oauth2';
+import { PrismaClient } from '@prisma/client';
 
-/** Build absolute base + optional API prefix for OAuth callbacks. */
-const PORT = Number(process.env.PORT ?? 4000);
-const RAW_BASE =
+const prisma = new PrismaClient();
+
+/* ------------ URL building ------------ */
+const API_PREFIX = process.env.API_PREFIX || '/api';
+const BACKEND_BASE = (
   process.env.BACKEND_BASE_URL ||
-  process.env.API_BASE_URL ||
   process.env.RENDER_EXTERNAL_URL ||
-  `http://localhost:${PORT}`;
-const BASE_URL = RAW_BASE.replace(/\/+$/, '');
+  `http://localhost:${process.env.PORT || 4000}`
+).replace(/\/+$/, '');
 
-const RAW_PREFIX = (process.env.API_PREFIX ?? '/api').trim();
-const API_PREFIX = RAW_PREFIX.startsWith('/') ? RAW_PREFIX : `/${RAW_PREFIX}`;
+const GOOGLE_CALLBACK_URL = `${BACKEND_BASE}${API_PREFIX}/auth/google/callback`;
+const GITHUB_CALLBACK_URL = `${BACKEND_BASE}${API_PREFIX}/auth/github/callback`;
 
-const cb = (path: string) => `${BASE_URL}${API_PREFIX}${path.startsWith('/') ? path : `/${path}`}`;
+console.log('[AUTH] BACKEND_BASE_URL =', BACKEND_BASE);
+console.log('[AUTH] GOOGLE_CALLBACK  =', GOOGLE_CALLBACK_URL);
+console.log('[AUTH] GITHUB_CALLBACK  =', GITHUB_CALLBACK_URL);
 
-/** Minimal profile we pass to the auth route; DB id is created there. */
-type MinimalPassportUser = {
-  id: string;                    // provider id (string)
-  provider: 'google' | 'github';
-  providerId: string;
-  email: string | null;
-  name?: string | null;
-  image?: string | null;
-};
-
-function firstProfileEmail(p: PassportProfile): string | null {
-  const v =
-    Array.isArray(p.emails) && p.emails[0]?.value ? p.emails[0].value : null;
-  return v ?? null;
+/* ------------ DB helper ------------ */
+async function upsertUserByEmail(email: string, name?: string | null) {
+  return prisma.user.upsert({
+    where: { email },
+    update: { name: name ?? undefined },
+    create: { email, name: name ?? undefined },
+  });
 }
 
-function firstProfilePhoto(p: PassportProfile): string | null {
-  const v =
-    Array.isArray((p as any).photos) && (p as any).photos[0]?.value
-      ? (p as any).photos[0].value
-      : null;
-  return v ?? null;
-}
+/* ------------ Google Strategy ------------ */
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      callbackURL: GOOGLE_CALLBACK_URL,
+    },
+    async (_at: string, _rt: string, profile: GoogleProfile, done: VerifyCallback) => {
+      try {
+        const email = profile.emails?.[0]?.value;
+        if (!email) return done(new Error('Google profile missing email'), false);
 
-function normalizeBase(
-  provider: 'google' | 'github',
-  profile: PassportProfile,
-  email: string | null
-): MinimalPassportUser {
-  const name =
-    (profile as any).displayName ||
-    (profile as any).username ||
-    email ||
-    undefined;
+        const name =
+          profile.displayName ||
+          (profile.name ? `${profile.name.givenName ?? ''} ${profile.name.familyName ?? ''}`.trim() : null);
 
-  return {
-    id: profile.id,
-    provider,
-    providerId: profile.id,
-    email,
-    name,
-    image: firstProfilePhoto(profile),
-  };
-}
-
-/** Fallback email fetch for GitHub when profile.emails is empty. */
-async function fetchGithubEmail(accessToken: string): Promise<string | null> {
-  try {
-    const r = await fetch('https://api.github.com/user/emails', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'inventory-app',
-      },
-    });
-    if (!r.ok) return null;
-    const data = (await r.json()) as Array<{
-      email: string;
-      primary: boolean;
-      verified: boolean;
-      visibility?: string | null;
-    }>;
-    const primary = data.find((e) => e.primary && e.verified)?.email;
-    if (primary) return primary;
-    const verified = data.find((e) => e.verified)?.email;
-    return verified ?? (data[0]?.email ?? null);
-  } catch {
-    return null;
-  }
-}
-
-/** ------------------------ GitHub Strategy ------------------------ */
-if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
-  const githubCallback = process.env.GITHUB_CALLBACK_URL || cb('/auth/github/callback');
-  const githubScope =
-    (process.env.GITHUB_SCOPE ?? 'user:email')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-  passport.use(
-    new GitHubStrategy(
-      {
-        clientID: process.env.GITHUB_CLIENT_ID,
-        clientSecret: process.env.GITHUB_CLIENT_SECRET,
-        callbackURL: githubCallback,
-        scope: githubScope,
-      },
-      async (
-        accessToken: string,
-        _refreshToken: string,
-        profile: PassportProfile,
-        done: VerifyCallback
-      ) => {
-        try {
-          // Prefer email from profile; if missing, call GitHub API.
-          let email = firstProfileEmail(profile);
-          if (!email) {
-            email = await fetchGithubEmail(accessToken);
-          }
-
-          const user = normalizeBase('github', profile, email);
-          // Cast to any to satisfy projects that augment Express.User with id:number.
-          done(null, user as any);
-        } catch (e) {
-          done(e as any);
-        }
+        const user = await upsertUserByEmail(email, name);
+        return done(null, { id: user.id, email: user.email });
+      } catch (e) {
+        return done(e as any, false);
       }
-    )
-  );
-}
+    }
+  )
+);
 
-/** ------------------------ Google Strategy ------------------------ */
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  const googleCallback = process.env.GOOGLE_CALLBACK_URL || cb('/auth/google/callback');
+/* ------------ GitHub Strategy ------------ */
+passport.use(
+  new GitHubStrategy(
+    {
+      clientID: process.env.GITHUB_CLIENT_ID || '',
+      clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+      callbackURL: GITHUB_CALLBACK_URL,
+    },
+    async (_at: string, _rt: string, profile: GitHubProfile, done: VerifyCallback) => {
+      try {
+        // GitHub’s typings don’t declare 'verified'; accept it if present, else primary, else first
+        const emails = (profile.emails ?? []) as Array<{ value: string; primary?: boolean; verified?: boolean }>;
+        const email =
+          emails.find((e) => e.verified)?.value ??
+          emails.find((e) => e.primary)?.value ??
+          emails[0]?.value ??
+          null;
 
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: googleCallback,
-        scope: ['profile', 'email'],
-      },
-      async (
-        _accessToken: string,
-        _refreshToken: string,
-        profile: PassportProfile,
-        done: VerifyCallback
-      ) => {
-        try {
-          const user = normalizeBase('google', profile, firstProfileEmail(profile));
-          done(null, user as any);
-        } catch (e) {
-          done(e as any);
-        }
+        if (!email) return done(new Error('GitHub profile missing email'), false);
+
+        const name = profile.displayName || profile.username || null;
+
+        const user = await upsertUserByEmail(email, name);
+        return done(null, { id: user.id, email: user.email });
+      } catch (e) {
+        return done(e as any, false);
       }
-    )
-  );
-}
+    }
+  )
+);
 
-/** Helpful logs in Render to confirm we’re using the right URLs */
-console.log('[auth] BASE_URL:', BASE_URL);
-console.log('[auth] API_PREFIX:', API_PREFIX);
-console.log('[auth] GitHub callback:', process.env.GITHUB_CALLBACK_URL || cb('/auth/github/callback'));
-console.log('[auth] Google callback:', process.env.GOOGLE_CALLBACK_URL || cb('/auth/google/callback'));
+/* ---- No serialize/deserialize needed (we use JWT, session: false everywhere) ---- */
