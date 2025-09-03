@@ -6,7 +6,6 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-/* ------------ URL building ------------ */
 const API_PREFIX = process.env.API_PREFIX || '/api';
 const BACKEND_BASE = (
   process.env.BACKEND_BASE_URL ||
@@ -21,7 +20,6 @@ console.log('[AUTH] BACKEND_BASE_URL =', BACKEND_BASE);
 console.log('[AUTH] GOOGLE_CALLBACK  =', GOOGLE_CALLBACK_URL);
 console.log('[AUTH] GITHUB_CALLBACK  =', GITHUB_CALLBACK_URL);
 
-/* ------------ DB helper ------------ */
 async function upsertUserByEmail(email: string, name?: string | null) {
   return prisma.user.upsert({
     where: { email },
@@ -30,7 +28,6 @@ async function upsertUserByEmail(email: string, name?: string | null) {
   });
 }
 
-/* ------------ Google Strategy ------------ */
 passport.use(
   new GoogleStrategy(
     {
@@ -42,11 +39,9 @@ passport.use(
       try {
         const email = profile.emails?.[0]?.value;
         if (!email) return done(new Error('Google profile missing email'), false);
-
         const name =
           profile.displayName ||
           (profile.name ? `${profile.name.givenName ?? ''} ${profile.name.familyName ?? ''}`.trim() : null);
-
         const user = await upsertUserByEmail(email, name);
         return done(null, { id: user.id, email: user.email });
       } catch (e) {
@@ -56,7 +51,6 @@ passport.use(
   )
 );
 
-/* ------------ GitHub Strategy ------------ */
 passport.use(
   new GitHubStrategy(
     {
@@ -66,7 +60,6 @@ passport.use(
     },
     async (_at: string, _rt: string, profile: GitHubProfile, done: VerifyCallback) => {
       try {
-        // GitHub’s typings don’t declare 'verified'; accept it if present, else primary, else first
         const emails = (profile.emails ?? []) as Array<{ value: string; primary?: boolean; verified?: boolean }>;
         const email =
           emails.find((e) => e.verified)?.value ??
@@ -77,7 +70,6 @@ passport.use(
         if (!email) return done(new Error('GitHub profile missing email'), false);
 
         const name = profile.displayName || profile.username || null;
-
         const user = await upsertUserByEmail(email, name);
         return done(null, { id: user.id, email: user.email });
       } catch (e) {
@@ -87,4 +79,4 @@ passport.use(
   )
 );
 
-/* ---- No serialize/deserialize needed (we use JWT, session: false everywhere) ---- */
+// We operate stateless (session:false), so no serialize/deserialize needed.
