@@ -1,4 +1,3 @@
-// apps/frontend/src/App.tsx
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./routes/Login";
 import Footer from "./components/layout/Footer";
@@ -6,6 +5,7 @@ import Home from "./pages/Home";
 import NotFound from "./routes/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import Logout from "./pages/Logout";
+import Dashboard from "./pages/Dashboard";
 import StudioDashboard from "./pages/StudioDashboard";
 import { useAuth } from "./hooks/useAuth";
 
@@ -27,6 +27,7 @@ export default function App() {
           {/* handy aliases */}
           <Route path="/signin" element={<Navigate to="/login" replace />} />
           <Route path="/auth" element={<Navigate to="/login" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
 
           {/* OAuth helpers */}
           <Route path="/oauth/callback" element={<OAuthCallback />} />
