@@ -43,6 +43,7 @@ function getIdType(model: ModelMeta): 'number' | 'string' {
   if (!t) return 'number';
   return t === 'String' ? 'string' : 'number';
 }
+
 function castId(value: unknown, asType: 'number' | 'string') {
   if (asType === 'number') {
     const n = typeof value === 'string' ? Number(value) : (value as number);
@@ -51,6 +52,7 @@ function castId(value: unknown, asType: 'number' | 'string') {
   if (value == null) return undefined;
   return String(value);
 }
+
 function castIds(values: unknown[], asType: 'number' | 'string') {
   return (Array.isArray(values) ? values : [])
     .map((v) => castId(v, asType))
@@ -167,10 +169,7 @@ function chooseSortKey(model: ModelMeta, requested?: string) {
   return model.scalarFields[0]?.name as string | undefined;
 }
 
-const CASCADE: Record<
-  string,
-  { delegate: string; fk: string }[]
-> = {
+const CASCADE: Record<string, { delegate: string; fk: string }[]> = {
   User: [
     { delegate: 'comment', fk: 'userId' },
     { delegate: 'like', fk: 'userId' },
@@ -200,7 +199,7 @@ const CASCADE: Record<
 
 router.get('/health', (_req, res) => res.json({ ok: true }));
 
-/** GET /api/studio/models  – resilient */
+/** GET /api/studio/models – resilient */
 router.get('/models', async (_req, res) => {
   try {
     const models: any[] = [];
@@ -361,14 +360,20 @@ router.post('/rows/:model/bulk-delete', async (req: Request, res: Response) => {
   const ids = castIds(rawIds, idType);
   if (!ids.length) return res.status(400).json({ error: 'No valid IDs provided' });
 
+  // Capture narrowed values BEFORE async closure to keep types non-null
+  const idKey = model.idField.name as string;
+  const delegateName = model.delegate as keyof typeof prisma;
+  const rules = CASCADE[model.name] ?? [];
+
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const rules = CASCADE[model.name] ?? [];
+      // cascade deletes first
       for (const r of rules) {
         await (tx as any)[r.delegate].deleteMany({ where: { [r.fk]: { in: ids } } });
       }
-      const deleted = await (tx as any)[model.delegate].deleteMany({
-        where: { [model.idField.name]: { in: ids } },
+      // then delete the primary records
+      const deleted = await (tx as any)[delegateName].deleteMany({
+        where: { [idKey]: { in: ids } },
       });
       return deleted;
     });
@@ -387,3 +392,4 @@ router.post('/rows/:model/bulk-delete', async (req: Request, res: Response) => {
 });
 
 export default router;
+

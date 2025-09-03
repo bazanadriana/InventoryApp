@@ -1,25 +1,31 @@
-import type { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import type { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+type JwtShape = { sub?: number | string; role?: 'admin' | 'user' };
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export default function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  const token =
+    (header && header.startsWith('Bearer ') ? header.slice(7) : undefined) ||
+    (req.cookies?.token as string | undefined);
+
+  if (!token) return res.status(401).json({ error: 'Missing token' });
+
   try {
-    let token: string | null = null;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!);
+    if (typeof decoded !== 'object' || decoded === null) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
-    // Allow Bearer header
-    const auth = req.get("authorization") || "";
-    if (auth.toLowerCase().startsWith("bearer ")) token = auth.slice(7);
+    const { sub, role } = decoded as JwtShape;
+    const id = typeof sub === 'string' ? Number(sub) : sub;
+    if (!id || Number.isNaN(id)) {
+      return res.status(401).json({ error: 'Invalid token subject' });
+    }
 
-    // Or httpOnly cookie set by OAuth
-    if (!token && req.cookies?.token) token = req.cookies.token;
-
-    if (!token) return res.status(401).json({ error: "unauthorized" });
-
-    const payload = jwt.verify(token, JWT_SECRET) as any;
-    (req as any).user = { id: payload.uid, email: payload.email };
-    return next();
+    req.user = { id: Number(id), role: role ?? 'user' };
+    next();
   } catch {
-    return res.status(401).json({ error: "unauthorized" });
+    return res.status(401).json({ error: 'Invalid token' });
   }
 }

@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import express, { ErrorRequestHandler } from 'express';
-import cors from 'cors';
+import express, { type ErrorRequestHandler } from 'express';
+import cors, { type CorsOptions } from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -14,13 +14,12 @@ import membersRoutes from './routes/membersRoutes';
 import commentsRoutes from './routes/commentsRoutes';
 import likesRoutes from './routes/likesRoutes';
 import { initFTS } from './search/pgFullText';
-import './auth/strategies.js';
-import authRoutes from './routes/authRoutes.js';
-import inventoryRoutes from './routes/inventoryRoutes.js';
-import userRoutes from './routes/userRoutes.js';
-import statsRoutes from './routes/statsRoutes.js';
-import studioRoutes from './routes/studioRoutes.js';
-import { requireAuth } from './middleware/requireAuth.js';
+import authRoutes from './routes/authRoutes';
+import inventoryRoutes from './routes/inventoryRoutes';
+import userRoutes from './routes/userRoutes';
+import statsRoutes from './routes/statsRoutes';
+import studioRoutes from './routes/studioRoutes';
+import requireAuth from './middleware/requireAuth';
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -39,9 +38,10 @@ function normalizeOrigin(o?: string | null) {
     const u = new URL(o);
     return `${u.protocol}//${u.host}`;
   } catch {
-    return o.replace(/\/+$/, '');
+    return String(o).replace(/\/+$/, '');
   }
 }
+
 const allowlist = new Set(
   [FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173']
     .concat(RENDER_EXTERNAL_URL ? [RENDER_EXTERNAL_URL] : [])
@@ -49,7 +49,7 @@ const allowlist = new Set(
     .map(normalizeOrigin)
 );
 
-const corsOptions: cors.CorsOptions = {
+const corsOptions: CorsOptions = {
   origin(origin, cb) {
     if (!origin) return cb(null, true);
     const ok = allowlist.has(normalizeOrigin(origin));
@@ -87,8 +87,7 @@ app.use('/api/stats', statsRoutes);
 // Protected Studio
 app.use('/api/studio', requireAuth, studioRoutes);
 
-initFTS().catch(console.error);
-
+// Other feature routes
 app.use('/api', searchRoutes);
 app.use('/api', itemsRoutes);
 app.use('/api', fieldsRoutes);
@@ -97,12 +96,17 @@ app.use('/api', membersRoutes);
 app.use('/api', commentsRoutes);
 app.use('/api', likesRoutes);
 
+// Initialize full-text search bootstrap (non-blocking)
+initFTS().catch(console.error);
+
 /* ------------------------ Error Handling ------------------------ */
 const errHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   console.error(err);
-  const status = (err as any)?.status || 500;
+  const status = (err as any)?.status ?? 500;
   const payload: any = { error: 'Server error' };
-  if (NODE_ENV !== 'production' && err?.message) payload.message = err.message;
+  if (NODE_ENV !== 'production' && (err as any)?.message) {
+    payload.message = (err as any).message;
+  }
   res.status(status).json(payload);
 };
 app.use(errHandler);

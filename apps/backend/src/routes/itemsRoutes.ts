@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../db/prisma';
-import { requireAuth } from '../middleware/requireAuth';
+import requireAuth from '../middleware/requireAuth';
 import { optimisticVersion } from '../middleware/optimistic';
 import { generateCustomId } from '../modules/items/id';
 import { upsertValues } from '../modules/items/values';

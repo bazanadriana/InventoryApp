@@ -20,3 +20,4 @@ apps/**/dist/
 !apps/backend/prisma/
 !apps/backend/prisma/schema.prisma
 !apps/backend/prisma/migrations/**
+apps/backend/dist
