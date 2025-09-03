@@ -1,24 +1,25 @@
-import type { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import type { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
 
-export interface AuthPayload {
-  sub?: string;
-  userId?: string;
-  email?: string | null;
-  name?: string | null;
-}
+const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const h = req.headers.authorization;
-    if (!h?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Auth required' });
-    }
-    const token = h.slice(7);
-    const payload = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-secret') as AuthPayload;
-    (req as any).user = payload; 
-    next();
+    let token: string | null = null;
+
+    // Allow Bearer header
+    const auth = req.get("authorization") || "";
+    if (auth.toLowerCase().startsWith("bearer ")) token = auth.slice(7);
+
+    // Or httpOnly cookie set by OAuth
+    if (!token && req.cookies?.token) token = req.cookies.token;
+
+    if (!token) return res.status(401).json({ error: "unauthorized" });
+
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+    (req as any).user = { id: payload.uid, email: payload.email };
+    return next();
   } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(401).json({ error: "unauthorized" });
   }
 }
