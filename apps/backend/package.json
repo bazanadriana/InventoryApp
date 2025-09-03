@@ -5,15 +5,14 @@
   "description": "Inventory App backend",
   "type": "commonjs",
   "main": "dist/server.js",
-  "engines": {
-    "node": ">=20.10"
-  },
+  "engines": { "node": ">=20.10" },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy || prisma db push",
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "start:prod": "sh -lc \"prisma migrate deploy || prisma db push\" && node dist/server.js",
+    "start:prod": "npm run prisma:migrate && node dist/server.js",
     "postinstall": "prisma generate || echo \"skip prisma\"",
     "db:seed": "prisma db seed",
     "db:migrate": "prisma migrate dev",
@@ -25,6 +24,7 @@
   },
   "dependencies": {
     "@prisma/client": "6.15.0",
+    "prisma": "6.15.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -52,7 +52,6 @@
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/passport-oauth2": "^1.8.0",
     "@types/pg": "^8.15.5",
-    "prisma": "6.15.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.1",
     "typescript": "^5.9.2"
