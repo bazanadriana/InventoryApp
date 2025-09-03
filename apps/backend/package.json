@@ -8,16 +8,21 @@
   "engines": { "node": ">=20.10" },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy || prisma db push",
-    "build": "npm run prisma:generate && tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "start:prod": "npm run prisma:migrate && node dist/server.js",
-    "postinstall": "prisma generate || echo \"skip prisma\"",
-    "db:seed": "prisma db seed",
+    "migrate:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
-    "migrate:deploy": "prisma migrate deploy"
+    "db:push": "prisma db push",         
+    "prisma:studio": "prisma studio",
+
+    "build": "npm run prisma:generate && tsc -p tsconfig.json",
+
+    "start": "prisma migrate deploy && node dist/server.js",
+
+    "start:nomigrate": "node dist/server.js",
+
+    "postinstall": "prisma generate || echo \"skip prisma\"",
+    "db:seed": "prisma db seed"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
