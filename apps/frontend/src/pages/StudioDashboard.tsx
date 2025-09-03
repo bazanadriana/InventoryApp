@@ -35,13 +35,31 @@ export default function StudioDashboard() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
 
-  // Logout
+  // Auth + router
   const { logout } = useAuth();
   const navigate = useNavigate();
+
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
   };
+
+  /** Centralized auth-error handler (401/403) */
+  const handleAuthError = (err: any) => {
+    const status = err?.response?.status;
+    if (status === 401 || status === 403) {
+      logout();
+      navigate('/', { replace: true });
+      return true;
+    }
+    return false;
+  };
+
+  const extractError = (err: any) =>
+    err?.response?.data?.error ||
+    err?.response?.data?.message ||
+    err?.message ||
+    'Request failed';
 
   const activeModel = useMemo(
     () => models.find((m) => m.name === active) || null,
@@ -51,9 +69,16 @@ export default function StudioDashboard() {
 
   useEffect(() => {
     (async () => {
-      const ms = await studioApi.getModels();
-      setModels(ms);
-      if (!active && ms.length) setActive(ms[0].name);
+      try {
+        const ms = await studioApi.getModels();
+        setModels(ms);
+        if (!active && ms.length) setActive(ms[0].name);
+      } catch (err) {
+        if (!handleAuthError(err)) {
+          console.error('Models load error:', err);
+          alert(extractError(err));
+        }
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -81,15 +106,6 @@ export default function StudioDashboard() {
     };
   }, []);
 
-  function extractError(err: any) {
-    return (
-      err?.response?.data?.error ||
-      err?.response?.data?.message ||
-      err?.message ||
-      'Request failed'
-    );
-  }
-
   async function load(customQ?: string) {
     if (!active) return;
     setLoading(true);
@@ -108,8 +124,10 @@ export default function StudioDashboard() {
       setTotal(resp.total);
       setSelectedIds([]);
     } catch (err) {
-      console.error('Load error:', err);
-      alert(extractError(err));
+      if (!handleAuthError(err)) {
+        console.error('Load error:', err);
+        alert(extractError(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -136,8 +154,10 @@ export default function StudioDashboard() {
       await studioApi.destroy(active, selectedIds);
       await load();
     } catch (err) {
-      console.error('Delete failed:', err);
-      alert(extractError(err));
+      if (!handleAuthError(err)) {
+        console.error('Delete failed:', err);
+        alert(extractError(err));
+      }
     }
   }
 
@@ -221,6 +241,7 @@ export default function StudioDashboard() {
     try {
       await studioApi.update(active, id, { [key]: value });
     } catch (err) {
+      if (handleAuthError(err)) return;
       console.error('Update failed:', err);
       // revert on error
       setRows((prev) =>
@@ -290,8 +311,10 @@ export default function StudioDashboard() {
       setAdding(false);
       await load();
     } catch (err) {
-      console.error('Create failed:', err);
-      setModalError(extractError(err));
+      if (!handleAuthError(err)) {
+        console.error('Create failed:', err);
+        setModalError(extractError(err));
+      }
     } finally {
       setSaving(false);
     }
@@ -306,7 +329,6 @@ export default function StudioDashboard() {
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
           </Link>
-          {/* Admin removed from Studio header */}
           <button onClick={handleLogout} className="hover:text-white">
             Logout
           </button>
@@ -437,7 +459,11 @@ export default function StudioDashboard() {
                     <th className="px-3 py-2 w-10">
                       <input
                         type="checkbox"
-                        checked={selectedIds.length > 0 && selectedIds.length === rows.length}
+                        checked={
+                          rows.length > 0 &&
+                          selectedIds.length > 0 &&
+                          selectedIds.length === rows.length
+                        }
                         onChange={(e) => toggleAllSelected(e.target.checked)}
                       />
                     </th>
