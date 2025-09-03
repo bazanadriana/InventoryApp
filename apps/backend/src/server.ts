@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
-import cors from 'cors';
+import cors, { type CorsOptions } from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -48,6 +48,7 @@ const COOKIE_SECRET =
 app.set('trust proxy', 1);
 
 /* ----------------------------- CORS ------------------------------ */
+// Build a strict allowlist; add any extra origins here if needed.
 const allowlist = new Set<string>([
   FRONTEND_ORIGIN,
   'http://localhost:5173',
@@ -58,15 +59,16 @@ const allowlist = new Set<string>([
 if (RENDER_EXTERNAL_URL) allowlist.add(RENDER_EXTERNAL_URL);
 if (NETLIFY_URL) allowlist.add(NETLIFY_URL);
 
-const corsOptions: cors.CorsOptions = {
+const corsOptions: CorsOptions = {
   origin(origin, cb) {
     // allow server-to-server, curl, and same-origin requests
     if (!origin) return cb(null, true);
     if (allowlist.has(origin)) return cb(null, true);
     return cb(new Error(`Not allowed by CORS: ${origin}`));
   },
-  credentials: true, // 🔑 allow cookies/credentials cross-site
+  credentials: true, // allow cookies/credentials cross-site (even if you use Bearer tokens)
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  // 🔑 Allow Authorization so the frontend can send Bearer tokens
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
