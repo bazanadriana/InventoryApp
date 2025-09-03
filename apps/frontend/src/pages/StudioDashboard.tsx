@@ -1,12 +1,12 @@
+// frontend/src/pages/StudioDashboard.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { studioApi, StudioModel } from '../services/studioApi';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../hooks/useAuth';
-import { studioApi } from '../services/studioApi';
-import type { StudioModel, RowsResp } from '../services/studioApi';
 
-type Col = RowsResp['columns'][number];
+type Col = { key: string; type: string; isId?: boolean; readOnly?: boolean };
 
 export default function StudioDashboard() {
   const [models, setModels] = useState<StudioModel[]>([]);
@@ -35,7 +35,7 @@ export default function StudioDashboard() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
 
-  // Logout
+  // Logout (avoid /logout 404 + double click)
   const { logout } = useAuth();
   const navigate = useNavigate();
   const handleLogout = () => {
@@ -47,7 +47,6 @@ export default function StudioDashboard() {
     () => models.find((m) => m.name === active) || null,
     [models, active]
   );
-  const idKey = useMemo(() => activeModel?.idField ?? 'id', [activeModel]);
 
   useEffect(() => {
     (async () => {
@@ -55,7 +54,6 @@ export default function StudioDashboard() {
       setModels(ms);
       if (!active && ms.length) setActive(ms[0].name);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -122,16 +120,18 @@ export default function StudioDashboard() {
   }
 
   function toggleAllSelected(checked: boolean) {
-    setSelectedIds(checked ? rows.map((r) => r[idKey]) : []);
+    if (!activeModel?.idField) return;
+    setSelectedIds(checked ? rows.map((r) => r[activeModel.idField!]) : []);
   }
 
   function toggleRowSelected(row: any) {
-    const id = row[idKey];
+    if (!activeModel?.idField) return;
+    const id = row[activeModel.idField];
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function handleDeleteSelected() {
-    if (selectedIds.length === 0) return;
+    if (!activeModel?.idField || selectedIds.length === 0) return;
     try {
       await studioApi.destroy(active, selectedIds);
       await load();
@@ -209,13 +209,17 @@ export default function StudioDashboard() {
     }
   }
 
+  /** ----------------------------------------------------------------
+   * FIX: define `commitInline` in this file so TS can find it
+   * ----------------------------------------------------------------*/
   const commitInline = async (row: any, key: string, value: any) => {
-    const id = row[idKey];
+    if (!activeModel?.idField) return;
+    const id = row[activeModel.idField];
     const prevValue = row[key];
 
     // optimistic update
     setRows((prev) =>
-      prev.map((r) => (r[idKey] === id ? { ...r, [key]: value } : r))
+      prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: value } : r))
     );
 
     try {
@@ -224,7 +228,7 @@ export default function StudioDashboard() {
       console.error('Update failed:', err);
       // revert on error
       setRows((prev) =>
-        prev.map((r) => (r[idKey] === id ? { ...r, [key]: prevValue } : r))
+        prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: prevValue } : r))
       );
       alert(extractError(err));
     }
@@ -299,14 +303,15 @@ export default function StudioDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Studio-only header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="text-2xl font-semibold">InventoryApp</div>
         <nav className="flex items-center gap-6">
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
           </Link>
-          {/* Admin removed from Studio header */}
+          <Link className="hover:text-white" to="/admin">
+            Admin
+          </Link>
           <button onClick={handleLogout} className="hover:text-white">
             Logout
           </button>
@@ -437,7 +442,9 @@ export default function StudioDashboard() {
                     <th className="px-3 py-2 w-10">
                       <input
                         type="checkbox"
-                        checked={selectedIds.length > 0 && selectedIds.length === rows.length}
+                        checked={
+                          selectedIds.length > 0 && selectedIds.length === rows.length
+                        }
                         onChange={(e) => toggleAllSelected(e.target.checked)}
                       />
                     </th>
@@ -484,13 +491,20 @@ export default function StudioDashboard() {
                   {!loading &&
                     rows.map((r) => (
                       <tr
-                        key={r[idKey] ?? JSON.stringify(r)}
+                        key={
+                          activeModel?.idField
+                            ? r[activeModel.idField]
+                            : JSON.stringify(r)
+                        }
                         className="odd:bg-slate-900/40 even:bg-slate-900/20"
                       >
                         <td className="px-3 py-2">
                           <input
                             type="checkbox"
-                            checked={selectedIds.includes(r[idKey])}
+                            checked={
+                              !!activeModel?.idField &&
+                              selectedIds.includes(r[activeModel.idField!])
+                            }
                             onChange={() => toggleRowSelected(r)}
                           />
                         </td>
