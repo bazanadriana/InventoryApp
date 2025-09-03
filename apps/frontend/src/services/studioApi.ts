@@ -1,5 +1,6 @@
 import { api } from './api';
 
+/* ============================ Types ============================ */
 export type StudioModel = {
   name: string;
   delegate: string;
@@ -26,11 +27,12 @@ export type RowsResp = {
   columns: { key: string; type: string; isId?: boolean; readOnly?: boolean }[];
 };
 
-/* ----------------------------- Utils ----------------------------- */
+/* ============================ Utils ============================ */
 function isProbablyDateString(v: string) {
   const d = new Date(v);
   return !isNaN(d.getTime());
 }
+
 function toISO(v: unknown): string | undefined {
   if (v instanceof Date) return isNaN(v.getTime()) ? undefined : v.toISOString();
   if (typeof v === 'string' && v.trim() && isProbablyDateString(v)) {
@@ -39,6 +41,7 @@ function toISO(v: unknown): string | undefined {
   }
   return undefined;
 }
+
 function toBoolean(v: unknown): boolean | undefined {
   if (typeof v === 'boolean') return v;
   if (typeof v === 'string') {
@@ -54,7 +57,6 @@ function toBoolean(v: unknown): boolean | undefined {
  * - drop empty strings/null/undefined
  * - coerce *At fields (createdAt/updatedAt/etc.) to ISO
  * - coerce common boolean string values
- * (Number coercion stays server-side.)
  */
 function cleanData(input: Record<string, any>) {
   const out: Record<string, any> = {};
@@ -80,11 +82,20 @@ function cleanData(input: Record<string, any>) {
   return out;
 }
 
-/* ------------------------------ API ------------------------------ */
-/** NOTE: API_BASE already ends with /api, so use paths like "/studio/*" here. */
+/* ============================ Auth cfg ============================ */
+/** Merge token header (if present) and enable credentials for cookie auth. */
+function authCfg(extra?: any) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = { ...(extra?.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return { withCredentials: true, ...(extra || {}), headers };
+}
+
+/* ============================= API ============================= */
+/** NOTE: `api` baseURL already includes `/api`; use `/studio/*` paths here. */
 export const studioApi = {
   async getModels() {
-    const r = await api.get<{ models: StudioModel[] }>('/studio/models');
+    const r = await api.get<{ models: StudioModel[] }>('/studio/models', authCfg());
     return r.data.models;
   },
 
@@ -96,28 +107,41 @@ export const studioApi = {
     order?: 'asc' | 'desc';
     q?: string;
   }) {
-    const r = await api.get<RowsResp>('/studio/rows', { params });
+    const cleanParams = {
+      ...params,
+      q: params.q?.trim() || undefined,
+    };
+    const r = await api.get<RowsResp>('/studio/rows', authCfg({ params: cleanParams }));
     return r.data;
   },
 
-  // POST /api/studio/rows/:model  (body = data)
+  /** POST /api/studio/rows/:model  (body = data) */
   async create(model: string, data: Record<string, any>) {
-    const r = await api.post(`/studio/rows/${encodeURIComponent(model)}`, cleanData(data));
-    return r.data;
-  },
-
-  // PATCH /api/studio/rows/:model/:id  (body = partial fields)
-  async update(model: string, id: any, data: Record<string, any>) {
-    const r = await api.patch(
-      `/studio/rows/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
-      cleanData(data)
+    const r = await api.post(
+      `/studio/rows/${encodeURIComponent(model)}`,
+      cleanData(data),
+      authCfg()
     );
     return r.data;
   },
 
-  // POST /api/studio/rows/:model/bulk-delete  (body = { ids: [...] })
+  /** PATCH /api/studio/rows/:model/:id  (body = partial fields) */
+  async update(model: string, id: any, data: Record<string, any>) {
+    const r = await api.patch(
+      `/studio/rows/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
+      cleanData(data),
+      authCfg()
+    );
+    return r.data;
+  },
+
+  /** POST /api/studio/rows/:model/bulk-delete  (body = { ids: [...] }) */
   async destroy(model: string, ids: any[]) {
-    const r = await api.post(`/studio/rows/${encodeURIComponent(model)}/bulk-delete`, { ids });
+    const r = await api.post(
+      `/studio/rows/${encodeURIComponent(model)}/bulk-delete`,
+      { ids },
+      authCfg()
+    );
     return r.data;
   },
 };
