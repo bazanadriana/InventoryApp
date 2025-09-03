@@ -65,5 +65,3 @@ ALTER TABLE "public"."InventoryMember" ADD CONSTRAINT "InventoryMember_userId_fk
 -- AddForeignKey
 ALTER TABLE "public"."Item" ADD CONSTRAINT "Item_inventoryId_fkey" FOREIGN KEY ("inventoryId") REFERENCES "public"."Inventory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
-ALTER TABLE "User"
-ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
