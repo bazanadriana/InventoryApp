@@ -1,11 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { studioApi, StudioModel } from '../services/studioApi';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../hooks/useAuth';
+import http from '../services/http';
+
+/** Keep local types so this file is self-contained */
+type StudioModel = {
+  name: string;
+  count?: number;
+  idField?: string; // primary key field name (e.g., "id")
+  fields?: any[]; // Prisma model fields metadata
+};
 
 type Col = { key: string; type: string; isId?: boolean; readOnly?: boolean };
+
+type GetRowsParams = {
+  model: string;
+  page: number;
+  perPage: number;
+  sort: string;
+  order: 'asc' | 'desc';
+  q?: string;
+};
+
+type GetRowsResponse = {
+  rows: Record<string, any>[];
+  columns: Col[];
+  total: number;
+  idField?: string;
+};
+
+const api = {
+  async getModels(): Promise<StudioModel[]> {
+    const { data } = await http.get('/api/studio/models');
+    return data?.models ?? [];
+  },
+  async getRows(params: GetRowsParams): Promise<GetRowsResponse> {
+    const { data } = await http.get('/api/studio/rows', { params });
+    return data as GetRowsResponse;
+  },
+  async update(model: string, id: number | string, patch: Record<string, any>) {
+    await http.patch(`/api/studio/rows/${encodeURIComponent(model)}/${id}`, patch);
+  },
+  async create(model: string, payload: Record<string, any>) {
+    await http.post(`/api/studio/rows/${encodeURIComponent(model)}`, payload);
+  },
+  async destroy(model: string, ids: Array<number | string>) {
+    await http.post(`/api/studio/rows/${encodeURIComponent(model)}/bulk-delete`, { ids });
+  },
+};
 
 export default function StudioDashboard() {
   const [models, setModels] = useState<StudioModel[]>([]);
@@ -46,10 +90,11 @@ export default function StudioDashboard() {
     () => models.find((m) => m.name === active) || null,
     [models, active]
   );
+  const idKey = useMemo(() => activeModel?.idField ?? 'id', [activeModel]);
 
   useEffect(() => {
     (async () => {
-      const ms = await studioApi.getModels();
+      const ms = await api.getModels();
       setModels(ms);
       if (!active && ms.length) setActive(ms[0].name);
     })();
@@ -92,7 +137,7 @@ export default function StudioDashboard() {
     if (!active) return;
     setLoading(true);
     try {
-      const resp = await studioApi.getRows({
+      const resp = await api.getRows({
         model: active,
         page,
         perPage,
@@ -120,20 +165,18 @@ export default function StudioDashboard() {
   }
 
   function toggleAllSelected(checked: boolean) {
-    if (!activeModel?.idField) return;
-    setSelectedIds(checked ? rows.map((r) => r[activeModel.idField!]) : []);
+    setSelectedIds(checked ? rows.map((r) => r[idKey]) : []);
   }
 
   function toggleRowSelected(row: any) {
-    if (!activeModel?.idField) return;
-    const id = row[activeModel.idField];
+    const id = row[idKey];
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function handleDeleteSelected() {
-    if (!activeModel?.idField || selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
     try {
-      await studioApi.destroy(active, selectedIds);
+      await api.destroy(active, selectedIds);
       await load();
     } catch (err) {
       console.error('Delete failed:', err);
@@ -210,22 +253,21 @@ export default function StudioDashboard() {
   }
 
   const commitInline = async (row: any, key: string, value: any) => {
-    if (!activeModel?.idField) return;
-    const id = row[activeModel.idField];
+    const id = row[idKey];
     const prevValue = row[key];
 
     // optimistic update
     setRows((prev) =>
-      prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: value } : r))
+      prev.map((r) => (r[idKey] === id ? { ...r, [key]: value } : r))
     );
 
     try {
-      await studioApi.update(active, id, { [key]: value });
+      await api.update(active, id, { [key]: value });
     } catch (err) {
       console.error('Update failed:', err);
       // revert on error
       setRows((prev) =>
-        prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: prevValue } : r))
+        prev.map((r) => (r[idKey] === id ? { ...r, [key]: prevValue } : r))
       );
       alert(extractError(err));
     }
@@ -287,7 +329,7 @@ export default function StudioDashboard() {
     setModalError('');
     try {
       const payload = withRelationConnects(draft);
-      await studioApi.create(active, payload);
+      await api.create(active, payload);
       setAdding(false);
       await load();
     } catch (err) {
@@ -438,9 +480,7 @@ export default function StudioDashboard() {
                     <th className="px-3 py-2 w-10">
                       <input
                         type="checkbox"
-                        checked={
-                          selectedIds.length > 0 && selectedIds.length === rows.length
-                        }
+                        checked={selectedIds.length > 0 && selectedIds.length === rows.length}
                         onChange={(e) => toggleAllSelected(e.target.checked)}
                       />
                     </th>
@@ -487,20 +527,13 @@ export default function StudioDashboard() {
                   {!loading &&
                     rows.map((r) => (
                       <tr
-                        key={
-                          activeModel?.idField
-                            ? r[activeModel.idField]
-                            : JSON.stringify(r)
-                        }
+                        key={r[idKey] ?? JSON.stringify(r)}
                         className="odd:bg-slate-900/40 even:bg-slate-900/20"
                       >
                         <td className="px-3 py-2">
                           <input
                             type="checkbox"
-                            checked={
-                              !!activeModel?.idField &&
-                              selectedIds.includes(r[activeModel.idField!])
-                            }
+                            checked={selectedIds.includes(r[idKey])}
                             onChange={() => toggleRowSelected(r)}
                           />
                         </td>
