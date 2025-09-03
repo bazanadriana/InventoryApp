@@ -1,4 +1,4 @@
-import { api } from './api'; 
+import { api } from './api';
 
 export type StudioModel = {
   name: string;
@@ -13,7 +13,7 @@ export type StudioModel = {
     isRequired?: boolean;
     isList?: boolean;
     isReadOnly?: boolean;
-    relationFromFields?: string[];  
+    relationFromFields?: string[];
   }[];
 };
 
@@ -27,7 +27,6 @@ export type RowsResp = {
 };
 
 /* ----------------------------- Utils ----------------------------- */
-
 function isProbablyDateString(v: string) {
   const d = new Date(v);
   return !isNaN(d.getTime());
@@ -40,7 +39,6 @@ function toISO(v: unknown): string | undefined {
   }
   return undefined;
 }
-
 function toBoolean(v: unknown): boolean | undefined {
   if (typeof v === 'boolean') return v;
   if (typeof v === 'string') {
@@ -53,17 +51,16 @@ function toBoolean(v: unknown): boolean | undefined {
 
 /**
  * Clean payload before sending to Studio API:
- * - drop empty strings
+ * - drop empty strings/null/undefined
  * - coerce *At fields (createdAt/updatedAt/etc.) to ISO
  * - coerce common boolean string values
- * (Number coercion is handled server-side; we keep it conservative here.)
+ * (Number coercion stays server-side.)
  */
 function cleanData(input: Record<string, any>) {
   const out: Record<string, any> = {};
   for (const [key, val] of Object.entries(input ?? {})) {
     if (val === '' || val === undefined || val === null) continue;
 
-    // Dates: any key ending with "At" or Date instances / date-like strings
     if (key.endsWith('At') || val instanceof Date || typeof val === 'string') {
       const iso = toISO(val);
       if (iso) {
@@ -72,7 +69,6 @@ function cleanData(input: Record<string, any>) {
       }
     }
 
-    // Booleans from strings
     const bool = toBoolean(val);
     if (bool !== undefined) {
       out[key] = bool;
@@ -85,7 +81,7 @@ function cleanData(input: Record<string, any>) {
 }
 
 /* ------------------------------ API ------------------------------ */
-
+/** NOTE: API_BASE already ends with /api, so use paths like "/studio/*" here. */
 export const studioApi = {
   async getModels() {
     const r = await api.get<{ models: StudioModel[] }>('/studio/models');
@@ -104,20 +100,24 @@ export const studioApi = {
     return r.data;
   },
 
+  // POST /api/studio/rows/:model  (body = data)
   async create(model: string, data: Record<string, any>) {
-    const payload = { model, data: cleanData(data) };
-    const r = await api.post('/studio/create', payload);
+    const r = await api.post(`/studio/rows/${encodeURIComponent(model)}`, cleanData(data));
     return r.data;
   },
 
+  // PATCH /api/studio/rows/:model/:id  (body = partial fields)
   async update(model: string, id: any, data: Record<string, any>) {
-    const payload = { model, id, data: cleanData(data) };
-    const r = await api.patch('/studio/update', payload);
+    const r = await api.patch(
+      `/studio/rows/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
+      cleanData(data)
+    );
     return r.data;
   },
 
+  // POST /api/studio/rows/:model/bulk-delete  (body = { ids: [...] })
   async destroy(model: string, ids: any[]) {
-    const r = await api.delete('/studio/delete', { data: { model, ids } });
+    const r = await api.post(`/studio/rows/${encodeURIComponent(model)}/bulk-delete`, { ids });
     return r.data;
   },
 };
