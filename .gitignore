@@ -16,3 +16,7 @@ apps/**/.env
 # Build
 dist/
 apps/**/dist/
+
+!apps/backend/prisma/
+!apps/backend/prisma/schema.prisma
+!apps/backend/prisma/migrations/**
