@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import passport from 'passport';
-
+import './config/passport';
 import searchRoutes from './routes/search.routes';
 import itemsRoutes from './routes/itemsRoutes';
 import fieldsRoutes from './routes/fieldsRoutes';
@@ -25,7 +25,7 @@ const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 const NETLIFY_URL = process.env.NETLIFY_URL ? `https://${process.env.NETLIFY_URL}` : undefined;
 
@@ -87,7 +87,7 @@ app.use('/api/stats', statsRoutes);
 // Protected Studio
 app.use('/api/studio', requireAuth, studioRoutes);
 
-// Other feature routes
+// Feature routes
 app.use('/api', searchRoutes);
 app.use('/api', itemsRoutes);
 app.use('/api', fieldsRoutes);
@@ -96,7 +96,7 @@ app.use('/api', membersRoutes);
 app.use('/api', commentsRoutes);
 app.use('/api', likesRoutes);
 
-// Initialize full-text search bootstrap (non-blocking)
+// Initialize full-text setup (non-blocking)
 initFTS().catch(console.error);
 
 /* ------------------------ Error Handling ------------------------ */

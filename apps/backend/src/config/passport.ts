@@ -1,100 +1,91 @@
 import passport from 'passport';
+import { PrismaClient } from '@prisma/client';
 import {
   Strategy as GoogleStrategy,
-  type StrategyOptions as GoogleStrategyOptions,
   type Profile as GoogleProfile,
-  type VerifyCallback as GoogleVerifyCallback,
+  type VerifyCallback as GoogleVerify,
 } from 'passport-google-oauth20';
-
 import {
   Strategy as GitHubStrategy,
-} from 'passport-github2';
-import type {
-  StrategyOptions as GitHubStrategyOptions,
-  Profile as GitHubProfile,
+  type Profile as GitHubProfile,
 } from 'passport-github2';
 
-let initialized = false;
+const prisma = new PrismaClient();
 
-export function configurePassport() {
-  if (initialized) return;
-  initialized = true;
-  const PORT = Number(process.env.PORT || 4000);
-  const RAW_BASE =
-    process.env.API_BASE_URL ||
-    process.env.RENDER_EXTERNAL_URL ||
-    `http://localhost:${PORT}`;
-
-  const BASE = RAW_BASE.replace(/\/$/, '');
-  const googleCallback = `${BASE}/api/auth/google/callback`;
-  const githubCallback = `${BASE}/api/auth/github/callback`;
-
-  console.log('[OAuth] Using callbacks:', { googleCallback, githubCallback });
-  const toExpressUser = (u: {
-    provider: 'google' | 'github';
-    providerId: string;
-    name?: string | null;
-    email?: string | null;
-  }): Express.User => {
-    return {
-      id: `${u.provider}:${u.providerId}`,
-      name: u.name ?? undefined,
-      email: u.email ?? undefined,
-      provider: u.provider,
-      providerId: u.providerId,
-    } as unknown as Express.User;
-  };
-
-  /* ---------- Google ---------- */
-  const googleOptions: GoogleStrategyOptions = {
-    clientID: process.env.GOOGLE_CLIENT_ID as string,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-    callbackURL: googleCallback,
-  };
-
-  const googleVerify = (
-    _accessToken: string,
-    _refreshToken: string,
-    profile: GoogleProfile,
-    done: GoogleVerifyCallback
-  ) => {
-    const user = toExpressUser({
-      provider: 'google',
-      providerId: profile.id,
-      name: profile.displayName ?? null,
-      email: profile.emails?.[0]?.value ?? null,
-    });
-    done(null, user);
-  };
-
-  passport.use(new GoogleStrategy(googleOptions, googleVerify));
-
-  /* ---------- GitHub ---------- */
-  const githubOptions: GitHubStrategyOptions = {
-    clientID: process.env.GITHUB_CLIENT_ID as string,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-    callbackURL: githubCallback,
-  };
-
-  const githubVerify = (
-    _accessToken: string,
-    _refreshToken: string,
-    profile: GitHubProfile,
-    done: (err: any, user?: Express.User | false) => void
-  ) => {
-    const primaryEmail = profile.emails?.[0]?.value ?? null;
-
-    const user = toExpressUser({
-      provider: 'github',
-      providerId: profile.id,
-      name: profile.displayName ?? profile.username ?? null,
-      email: primaryEmail,
-    });
-
-    done(null, user);
-  };
-
-  passport.use(new GitHubStrategy(githubOptions, githubVerify));
+/* ----------------------------- ENV HELPERS ----------------------------- */
+function required(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`${name} is not set`);
+  return v;
 }
 
-export default passport;
+const BACKEND_BASE = (
+  process.env.BACKEND_BASE_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  `http://localhost:${process.env.PORT || 4000}`
+).replace(/\/+$/, '');
+
+const GOOGLE_CLIENT_ID = required('GOOGLE_CLIENT_ID');
+const GOOGLE_CLIENT_SECRET = required('GOOGLE_CLIENT_SECRET');
+
+const GITHUB_CLIENT_ID = required('GITHUB_CLIENT_ID');
+const GITHUB_CLIENT_SECRET = required('GITHUB_CLIENT_SECRET');
+
+/* ------------------------------- UTILS -------------------------------- */
+async function findOrCreateByEmail(email: string, displayName?: string | null) {
+  let user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: { email, name: displayName ?? null },
+    });
+  }
+  return user;
+}
+
+type Done = (error: any, user?: any, info?: any) => void;
+
+/* -------------------------------- GOOGLE -------------------------------- */
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+      callbackURL: `${BACKEND_BASE}/api/auth/google/callback`,
+    },
+    async (_accessToken: string, _refreshToken: string, profile: GoogleProfile, done: GoogleVerify) => {
+      try {
+        const email = profile.emails?.[0]?.value;
+        if (!email) return done(new Error('Google profile did not include an email'), undefined);
+        const user = await findOrCreateByEmail(email, profile.displayName);
+        return done(null, user);
+      } catch (err) {
+        return done(err as any, undefined);
+      }
+    }
+  )
+);
+
+/* -------------------------------- GITHUB -------------------------------- */
+passport.use(
+  new GitHubStrategy(
+    {
+      clientID: GITHUB_CLIENT_ID,
+      clientSecret: GITHUB_CLIENT_SECRET,
+      callbackURL: `${BACKEND_BASE}/api/auth/github/callback`,
+      scope: ['user:email'],
+    },
+    async (_accessToken: string, _refreshToken: string, profile: GitHubProfile, done: Done) => {
+      try {
+        const email =
+          profile.emails?.[0]?.value || null;
+
+        if (!email) return done(new Error('GitHub profile did not include an email'), undefined);
+
+        const user = await findOrCreateByEmail(email, profile.displayName);
+        return done(null, user);
+      } catch (err) {
+        return done(err as any, undefined);
+      }
+    }
+  )
+);
