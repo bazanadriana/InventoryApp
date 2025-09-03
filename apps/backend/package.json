@@ -10,15 +10,15 @@
     "dev": "tsx watch src/server.ts",
 
     "prisma:generate": "prisma generate",
+    "prisma:studio": "prisma studio",
     "migrate:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",         
-    "prisma:studio": "prisma studio",
+    "db:push": "prisma db push",
 
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
 
     "start": "prisma migrate deploy && node dist/server.js",
-
+    "start:prod": "prisma migrate deploy && node dist/server.js",
     "start:nomigrate": "node dist/server.js",
 
     "postinstall": "prisma generate || echo \"skip prisma\"",
