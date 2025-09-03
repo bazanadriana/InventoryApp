@@ -9,6 +9,9 @@ import type { StudioModel, RowsResp } from '../services/studioApi';
 type Col = RowsResp['columns'][number];
 
 export default function StudioDashboard() {
+  const { token, logout } = useAuth(); // ⬅ token guard
+  const navigate = useNavigate();
+
   const [models, setModels] = useState<StudioModel[]>([]);
   const [active, setActive] = useState<string>('');
   const [searchModel, setSearchModel] = useState('');
@@ -35,9 +38,13 @@ export default function StudioDashboard() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
 
-  // Logout
-  const { logout } = useAuth();
-  const navigate = useNavigate();
+  // Bounce unauthenticated users to login
+  useEffect(() => {
+    if (!token) {
+      navigate('/login?next=/dashboard', { replace: true });
+    }
+  }, [token, navigate]);
+
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
@@ -50,19 +57,20 @@ export default function StudioDashboard() {
   const idKey = useMemo(() => activeModel?.idField ?? 'id', [activeModel]);
 
   useEffect(() => {
+    if (!token) return;
     (async () => {
       const ms = await studioApi.getModels();
       setModels(ms);
       if (!active && ms.length) setActive(ms[0].name);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !token) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, page, perPage, sort, order]);
+  }, [active, page, perPage, sort, order, token]);
 
   // Close Fields popover on outside click / Escape
   useEffect(() => {
@@ -91,7 +99,7 @@ export default function StudioDashboard() {
   }
 
   async function load(customQ?: string) {
-    if (!active) return;
+    if (!active || !token) return;
     setLoading(true);
     try {
       const resp = await studioApi.getRows({
@@ -107,8 +115,13 @@ export default function StudioDashboard() {
       setSelectedCols((prev) => (prev.length ? prev : resp.columns.map((c) => c.key)));
       setTotal(resp.total);
       setSelectedIds([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Load error:', err);
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        logout();
+        navigate('/login?next=/dashboard', { replace: true });
+        return;
+      }
       alert(extractError(err));
     } finally {
       setLoading(false);
@@ -135,8 +148,13 @@ export default function StudioDashboard() {
     try {
       await studioApi.destroy(active, selectedIds);
       await load();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Delete failed:', err);
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        logout();
+        navigate('/login?next=/dashboard', { replace: true });
+        return;
+      }
       alert(extractError(err));
     }
   }
@@ -220,12 +238,17 @@ export default function StudioDashboard() {
 
     try {
       await studioApi.update(active, id, { [key]: value });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Update failed:', err);
       // revert on error
       setRows((prev) =>
         prev.map((r) => (r[idKey] === id ? { ...r, [key]: prevValue } : r))
       );
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        logout();
+        navigate('/login?next=/dashboard', { replace: true });
+        return;
+      }
       alert(extractError(err));
     }
   };
@@ -289,8 +312,13 @@ export default function StudioDashboard() {
       await studioApi.create(active, payload);
       setAdding(false);
       await load();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Create failed:', err);
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        logout();
+        navigate('/login?next=/dashboard', { replace: true });
+        return;
+      }
       setModalError(extractError(err));
     } finally {
       setSaving(false);
