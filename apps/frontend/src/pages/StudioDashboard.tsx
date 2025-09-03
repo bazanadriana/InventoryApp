@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { studioApi, StudioModel } from '../services/studioApi';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../hooks/useAuth';
+import { studioApi } from '../services/studioApi';
+import type { StudioModel, RowsResp } from '../services/studioApi';
 
-type Col = { key: string; type: string; isId?: boolean; readOnly?: boolean };
+type Col = RowsResp['columns'][number];
 
 export default function StudioDashboard() {
   const [models, setModels] = useState<StudioModel[]>([]);
@@ -34,7 +35,7 @@ export default function StudioDashboard() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
 
-  // Auth
+  // Logout
   const { logout } = useAuth();
   const navigate = useNavigate();
   const handleLogout = () => {
@@ -42,41 +43,17 @@ export default function StudioDashboard() {
     navigate('/', { replace: true });
   };
 
-  // Centralized auth error handler
-  const handleAuthError = (err: any) => {
-    const status = err?.response?.status;
-    if (status === 401 || status === 403) {
-      // token missing/expired/blocked → sign out and bounce to home
-      logout();
-      navigate('/', { replace: true });
-      return true;
-    }
-    return false;
-  };
-
-  const extractError = (err: any) =>
-    err?.response?.data?.error ||
-    err?.response?.data?.message ||
-    err?.message ||
-    'Request failed';
-
   const activeModel = useMemo(
     () => models.find((m) => m.name === active) || null,
     [models, active]
   );
+  const idKey = useMemo(() => activeModel?.idField ?? 'id', [activeModel]);
 
   useEffect(() => {
     (async () => {
-      try {
-        const ms = await studioApi.getModels();
-        setModels(ms);
-        if (!active && ms.length) setActive(ms[0].name);
-      } catch (err) {
-        if (!handleAuthError(err)) {
-          console.error('Models load error:', err);
-          alert(extractError(err));
-        }
-      }
+      const ms = await studioApi.getModels();
+      setModels(ms);
+      if (!active && ms.length) setActive(ms[0].name);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -104,6 +81,15 @@ export default function StudioDashboard() {
     };
   }, []);
 
+  function extractError(err: any) {
+    return (
+      err?.response?.data?.error ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Request failed'
+    );
+  }
+
   async function load(customQ?: string) {
     if (!active) return;
     setLoading(true);
@@ -122,10 +108,8 @@ export default function StudioDashboard() {
       setTotal(resp.total);
       setSelectedIds([]);
     } catch (err) {
-      if (!handleAuthError(err)) {
-        console.error('Load error:', err);
-        alert(extractError(err));
-      }
+      console.error('Load error:', err);
+      alert(extractError(err));
     } finally {
       setLoading(false);
     }
@@ -138,26 +122,22 @@ export default function StudioDashboard() {
   }
 
   function toggleAllSelected(checked: boolean) {
-    if (!activeModel?.idField) return;
-    setSelectedIds(checked ? rows.map((r) => r[activeModel.idField!]) : []);
+    setSelectedIds(checked ? rows.map((r) => r[idKey]) : []);
   }
 
   function toggleRowSelected(row: any) {
-    if (!activeModel?.idField) return;
-    const id = row[activeModel.idField];
+    const id = row[idKey];
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function handleDeleteSelected() {
-    if (!activeModel?.idField || selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
     try {
       await studioApi.destroy(active, selectedIds);
       await load();
     } catch (err) {
-      if (!handleAuthError(err)) {
-        console.error('Delete failed:', err);
-        alert(extractError(err));
-      }
+      console.error('Delete failed:', err);
+      alert(extractError(err));
     }
   }
 
@@ -229,23 +209,22 @@ export default function StudioDashboard() {
     }
   }
 
-  // Inline edit with optimistic update + 401 handling
   const commitInline = async (row: any, key: string, value: any) => {
-    if (!activeModel?.idField) return;
-    const id = row[activeModel.idField];
+    const id = row[idKey];
     const prevValue = row[key];
 
+    // optimistic update
     setRows((prev) =>
-      prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: value } : r))
+      prev.map((r) => (r[idKey] === id ? { ...r, [key]: value } : r))
     );
 
     try {
       await studioApi.update(active, id, { [key]: value });
     } catch (err) {
-      if (handleAuthError(err)) return;
       console.error('Update failed:', err);
+      // revert on error
       setRows((prev) =>
-        prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: prevValue } : r))
+        prev.map((r) => (r[idKey] === id ? { ...r, [key]: prevValue } : r))
       );
       alert(extractError(err));
     }
@@ -272,6 +251,7 @@ export default function StudioDashboard() {
       if (c.isId || c.readOnly) return;
       blank[c.key] = null;
     });
+    // add synthetic relation ids if needed
     requiredSingleRelations.forEach((rel: any) => {
       if (!relationHasScalarFK(rel.name, rel.relationFromFields)) {
         const synthetic = `${rel.name}Id`;
@@ -283,11 +263,12 @@ export default function StudioDashboard() {
     setAdding(true);
   }
 
+  // Turn any synthetic `<relation>Id` into nested `{ relation: { connect: { id } } }`
   function withRelationConnects(payload: Record<string, any>) {
     const out: Record<string, any> = { ...payload };
     requiredSingleRelations.forEach((rel: any) => {
-      if (relationHasScalarFK(rel.name, rel.relationFromFields)) return;
-      const key = `${rel.name}Id`;
+      if (relationHasScalarFK(rel.name, rel.relationFromFields)) return; // scalar FK exists; keep as-is
+      const key = `${rel.name}Id`; // e.g., itemId
       const raw = out[key];
       if (raw !== '' && raw != null) {
         const id = typeof raw === 'string' ? Number(raw) : raw;
@@ -309,10 +290,8 @@ export default function StudioDashboard() {
       setAdding(false);
       await load();
     } catch (err) {
-      if (!handleAuthError(err)) {
-        console.error('Create failed:', err);
-        setModalError(extractError(err));
-      }
+      console.error('Create failed:', err);
+      setModalError(extractError(err));
     } finally {
       setSaving(false);
     }
@@ -320,13 +299,14 @@ export default function StudioDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
+      {/* Studio-only header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="text-2xl font-semibold">InventoryApp</div>
         <nav className="flex items-center gap-6">
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
           </Link>
-          {/* Admin link removed per your request */}
+          {/* Admin removed from Studio header */}
           <button onClick={handleLogout} className="hover:text-white">
             Logout
           </button>
@@ -410,7 +390,7 @@ export default function StudioDashboard() {
                           type="checkbox"
                           checked={selectedCols.includes(c.key)}
                           onChange={() => toggleCol(c.key)}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()} // don’t close
                         />
                         <span className="text-sm">{c.key}</span>
                       </label>
@@ -457,11 +437,7 @@ export default function StudioDashboard() {
                     <th className="px-3 py-2 w-10">
                       <input
                         type="checkbox"
-                        checked={
-                          rows.length > 0 &&
-                          activeModel?.idField !== undefined &&
-                          selectedIds.length === rows.length
-                        }
+                        checked={selectedIds.length > 0 && selectedIds.length === rows.length}
                         onChange={(e) => toggleAllSelected(e.target.checked)}
                       />
                     </th>
@@ -508,20 +484,13 @@ export default function StudioDashboard() {
                   {!loading &&
                     rows.map((r) => (
                       <tr
-                        key={
-                          activeModel?.idField
-                            ? r[activeModel.idField]
-                            : JSON.stringify(r)
-                        }
+                        key={r[idKey] ?? JSON.stringify(r)}
                         className="odd:bg-slate-900/40 even:bg-slate-900/20"
                       >
                         <td className="px-3 py-2">
                           <input
                             type="checkbox"
-                            checked={
-                              !!activeModel?.idField &&
-                              selectedIds.includes(r[activeModel.idField!])
-                            }
+                            checked={selectedIds.includes(r[idKey])}
                             onChange={() => toggleRowSelected(r)}
                           />
                         </td>
