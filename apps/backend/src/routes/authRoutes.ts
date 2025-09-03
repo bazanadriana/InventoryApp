@@ -1,3 +1,4 @@
+// apps/backend/src/routes/authRoutes.ts
 import type { Request, Response, NextFunction } from 'express';
 import { Router } from 'express';
 import passport from 'passport';
@@ -13,9 +14,13 @@ const BACKEND_BASE = (
   `http://localhost:${process.env.PORT || 4000}`
 ).replace(/\/+$/, '');
 
-const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/+$/, '');
+const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173')
+  .replace(/\/+$/, '');
+
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const JWT_TTL = process.env.JWT_TTL || '7d';
+
+const COOKIE_SECURE = FRONTEND_ORIGIN.startsWith('https'); // cross-site cookie needs Secure on prod
 
 type OAuthUser = { id: number; email: string | null };
 
@@ -26,7 +31,7 @@ function signToken(payload: object) {
 function setAuthCookie(res: Response, token: string) {
   res.cookie('token', token, {
     httpOnly: true,
-    secure: true,
+    secure: COOKIE_SECURE,
     sameSite: 'none',
     path: '/',
     maxAge: 1000 * 60 * 60 * 24 * 7,
@@ -34,6 +39,7 @@ function setAuthCookie(res: Response, token: string) {
 }
 
 function successRedirect(res: Response) {
+  // ✅ land on the app dashboard after successful OAuth
   res.redirect(`${FRONTEND_ORIGIN}/dashboard`);
 }
 
@@ -45,44 +51,53 @@ function failureRedirect(res: Response, code = 'oauth', detail?: string) {
 // Generic handler to reduce duplication + add rich logging
 function handleCallback(provider: 'google' | 'github') {
   return (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate(provider, { session: false }, async (err: unknown, user: OAuthUser | false, info?: unknown) => {
-      try {
-        if (err) {
-          console.error(`[${provider}] oauth error:`, util.inspect(err, { depth: 4 }));
-          return failureRedirect(res, 'oauth', (err as any)?.message || String(err));
-        }
-        // Some providers put details in req.query or info
-        if (req.query?.error) {
-          console.error(`[${provider}] provider returned error query:`, req.query);
-          return failureRedirect(res, 'oauth', String(req.query.error));
-        }
-        if (!user) {
-          console.warn(`[${provider}] no user returned. info=`, util.inspect(info, { depth: 4 }));
-          return failureRedirect(res, 'unauthorized');
-        }
+    passport.authenticate(
+      provider,
+      { session: false },
+      async (err: unknown, user: OAuthUser | false, info?: unknown) => {
+        try {
+          if (err) {
+            console.error(`[${provider}] oauth error:`, util.inspect(err, { depth: 4 }));
+            return failureRedirect(res, 'oauth', (err as any)?.message || String(err));
+          }
+          if (req.query?.error) {
+            console.error(`[${provider}] provider returned error query:`, req.query);
+            return failureRedirect(res, 'oauth', String(req.query.error));
+          }
+          if (!user) {
+            console.warn(`[${provider}] no user returned. info=`, util.inspect(info, { depth: 4 }));
+            return failureRedirect(res, 'unauthorized');
+          }
 
-        const token = signToken({ uid: user.id, email: user.email });
-        setAuthCookie(res, token);
-        return successRedirect(res);
-      } catch (e: any) {
-        console.error(`[${provider}] callback exception:`, e);
-        return failureRedirect(res, 'server', e?.message);
+          const token = signToken({ uid: user.id, email: user.email });
+          setAuthCookie(res, token);
+          return successRedirect(res);
+        } catch (e: any) {
+          console.error(`[${provider}] callback exception:`, e);
+          return failureRedirect(res, 'server', e?.message);
+        }
       }
-    })(req, res, next);
+    )(req, res, next);
   };
 }
 
 /* ---------- Initiation routes ---------- */
-router.get('/auth/google', passport.authenticate('google', {
-  scope: ['profile', 'email'],
-  prompt: 'select_account',
-  session: false,
-}));
+router.get(
+  '/auth/google',
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    prompt: 'select_account',
+    session: false,
+  })
+);
 
-router.get('/auth/github', passport.authenticate('github', {
-  scope: ['user:email'],
-  session: false,
-}));
+router.get(
+  '/auth/github',
+  passport.authenticate('github', {
+    scope: ['user:email'],
+    session: false,
+  })
+);
 
 /* ---------- Callback routes ---------- */
 router.get('/auth/google/callback', handleCallback('google'));
@@ -90,7 +105,7 @@ router.get('/auth/github/callback', handleCallback('github'));
 
 /* ---------- Session helpers ---------- */
 router.post('/auth/logout', (_req, res) => {
-  res.clearCookie('token', { path: '/', sameSite: 'none', secure: true });
+  res.clearCookie('token', { path: '/', sameSite: 'none', secure: COOKIE_SECURE });
   res.status(204).end();
 });
 

@@ -25,3 +25,4 @@ coverage/
 !apps/backend/prisma/
 !apps/backend/prisma/schema.prisma
 !apps/backend/prisma/migrations/**
+repo
