@@ -2,11 +2,28 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
+function getParamFromHash(name: string): string | null {
+  if (!window.location.hash) return null;
+  const hp = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return hp.get(name);
+}
+
+/** Ensure we store only the raw JWT (no "Bearer " prefix) */
+function stripBearer(t: string) {
+  return t.startsWith("Bearer ") ? t.slice("Bearer ".length) : t;
+}
+
+/** Very simple open-redirect guard */
+function sanitizeNext(next: string | null | undefined) {
+  const val = next || "/dashboard";
+  return val.startsWith("/") && !val.startsWith("//") ? val : "/dashboard";
+}
+
 export default function OAuthCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { saveToken } = useAuth();
-  const ran = useRef(false); // avoid double-run in StrictMode (dev)
+  const ran = useRef(false); // avoid double-run in StrictMode
 
   useEffect(() => {
     if (ran.current) return;
@@ -20,41 +37,41 @@ export default function OAuthCallback() {
       params.get("access_token") ||
       params.get("t");
 
-    let hashToken: string | null = null;
-    if (!searchToken && window.location.hash) {
-      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-      hashToken =
-        hashParams.get("token") ||
-        hashParams.get("jwt") ||
-        hashParams.get("id_token") ||
-        hashParams.get("access_token") ||
-        hashParams.get("t");
-    }
+    const hashToken =
+      getParamFromHash("token") ||
+      getParamFromHash("jwt") ||
+      getParamFromHash("id_token") ||
+      getParamFromHash("access_token") ||
+      getParamFromHash("t");
 
-    const token = searchToken || hashToken;
+    const rawToken = searchToken || hashToken;
 
     // If backend sign-in failed, it may send ?err=...
     const err = params.get("err");
-    if (err && !token) {
+    if (err && !rawToken) {
       navigate(`/login?err=${encodeURIComponent(err)}`, { replace: true });
       return;
     }
 
-    if (token) {
-      // Persist token (localStorage via useAuth helper)
-      saveToken(token);
+    if (rawToken) {
+      // Store only the JWT string (without 'Bearer ')
+      const jwt = stripBearer(rawToken);
+      saveToken(jwt); // useAuth should put it in localStorage
 
-      // Optional post-login target (?next=/some/path) with open-redirect guard
-      const rawNext = params.get("next") || "/dashboard";
-      const safeNext =
-        rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
+      // Optional: support role/uid via params if you pass them (non-breaking)
+      const role = params.get("role") || getParamFromHash("role");
+      if (role) localStorage.setItem("role", role);
 
-      // Clean URL & navigate. Use hard replace as a safety net for guard race conditions.
+      // Redirect target
+      const safeNext = sanitizeNext(params.get("next") || getParamFromHash("next"));
+
+      // Clean URL (remove token from address bar) & navigate
       window.history.replaceState({}, "", safeNext);
       navigate(safeNext, { replace: true });
 
+      // Belt & suspenders: ensure navigation even if router guards race
       setTimeout(() => {
-        if (window.location.pathname !== safeNext) {
+        if (window.location.pathname + window.location.search !== safeNext) {
           window.location.replace(safeNext);
         }
       }, 0);

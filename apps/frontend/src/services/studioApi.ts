@@ -83,13 +83,48 @@ function cleanData(input: Record<string, any>) {
 }
 
 /* ============================ Auth cfg ============================ */
+function normalizeBearer(raw: string | null): string | null {
+  if (!raw) return null;
+  return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`;
+}
+
 /** Merge token header (if present) and enable credentials for cookie auth. */
 function authCfg(extra?: any) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? normalizeBearer(localStorage.getItem('token')) : null;
   const headers: Record<string, string> = { ...(extra?.headers || {}) };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers.Authorization = token;
   return { withCredentials: true, ...(extra || {}), headers };
 }
+
+/** Global interceptors: normalize token & handle 401/403 */
+api.interceptors.request.use((config) => {
+  const token = typeof window !== 'undefined' ? normalizeBearer(localStorage.getItem('token')) : null;
+  if (token) {
+    config.headers = { ...(config.headers || {}), Authorization: token } as any;
+  }
+  config.withCredentials = true;
+  return config;
+});
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    const status = err?.response?.status;
+    if (status === 401 || status === 403) {
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('role');
+          // Redirect to login/home
+          window.location.replace('/');
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return Promise.reject(err);
+  }
+);
 
 /* ============================= API ============================= */
 /** NOTE: `api` baseURL already includes `/api`; use `/studio/*` paths here. */
