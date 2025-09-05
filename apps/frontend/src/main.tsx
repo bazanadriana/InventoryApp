@@ -16,7 +16,6 @@ export const API_BASE =
 axios.defaults.baseURL = API_BASE;
 // ❗ We are NOT using cookies for auth; rely on Authorization: Bearer <jwt>
 axios.defaults.withCredentials = false;
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
