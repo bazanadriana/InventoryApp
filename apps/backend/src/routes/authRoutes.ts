@@ -31,7 +31,7 @@ const EXPIRES_IN: SignOptions['expiresIn'] = (() => {
 })();
 
 /* --------------------------- Helpers --------------------------- */
-type OAuthUser = { id: number; email: string | null; role?: 'admin' | 'user' };
+type OAuthUser = { id: number | string; email: string | null; role?: 'admin' | 'user' };
 
 function signToken(payload: object) {
   const opts: SignOptions = { expiresIn: EXPIRES_IN };
@@ -39,7 +39,7 @@ function signToken(payload: object) {
 }
 
 function bearerRedirect(res: Response, token: string) {
-  // ✅ Redirect with token in query; frontend stores it (localStorage)
+  // ✅ Redirect with token in query; frontend stores it (localStorage) and uses Bearer
   res.redirect(`${FRONTEND_ORIGIN}/auth/callback?token=${encodeURIComponent(token)}`);
 }
 
@@ -52,7 +52,7 @@ function failureRedirect(res: Response, code = 'oauth', detail?: string) {
 function getBearer(req: Request): string | null {
   const h = req.headers['authorization'];
   if (!h) return null;
-  const [scheme, token] = h.split(' ');
+  const [scheme, token] = String(h).split(' ');
   if (!scheme || !token) return null;
   if (scheme.toLowerCase() !== 'bearer') return null;
   return token;
@@ -126,9 +126,17 @@ router.get('/me', (req, res) => {
   try {
     const token = getBearer(req);
     if (!token) return res.status(401).json({ user: null });
+
     const payload = jwt.verify(token, JWT_SECRET) as any;
+
+    // Accept legacy tokens too (uid/id)
+    const id = payload.sub ?? payload.uid ?? payload.id;
+    if (id === undefined || id === null) {
+      return res.status(401).json({ user: null });
+    }
+
     return res.json({
-      user: { id: payload.sub, email: payload.email, role: payload.role ?? 'user' },
+      user: { id, email: payload.email ?? null, role: payload.role ?? 'user' },
     });
   } catch {
     return res.status(401).json({ user: null });
