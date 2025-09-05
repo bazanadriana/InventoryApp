@@ -18,11 +18,19 @@ export default function App() {
     <div className="min-h-screen">
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
+          {/* Public */}
           <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Home />} /> {/* or your Login component */}
+          {/* Use Home as login screen; replace with <Login /> if you have one */}
+          <Route path="/login" element={<Home />} />
+
+          {/* OAuth callback (support both new and legacy paths) */}
           <Route path="/auth/callback" element={<OAuthCallback />} />
           <Route path="/oauth/callback" element={<Navigate to="/auth/callback" replace />} />
+
+          {/* Logout helper */}
           <Route path="/logout" element={<Logout />} />
+
+          {/* Protected app */}
           <Route
             path="/dashboard"
             element={
@@ -31,7 +39,11 @@ export default function App() {
               </RequireAuth>
             }
           />
+
+          {/* Alias */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
+
+          {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
