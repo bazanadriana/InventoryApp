@@ -1,4 +1,4 @@
-import { api } from './api';
+import http from './http';
 
 /* ============================ Types ============================ */
 export type StudioModel = {
@@ -82,55 +82,11 @@ function cleanData(input: Record<string, any>) {
   return out;
 }
 
-/* ============================ Auth cfg ============================ */
-function normalizeBearer(raw: string | null): string | null {
-  if (!raw) return null;
-  return raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`;
-}
-
-/** Merge token header (if present) and enable credentials for cookie auth. */
-function authCfg(extra?: any) {
-  const token = typeof window !== 'undefined' ? normalizeBearer(localStorage.getItem('token')) : null;
-  const headers: Record<string, string> = { ...(extra?.headers || {}) };
-  if (token) headers.Authorization = token;
-  return { withCredentials: true, ...(extra || {}), headers };
-}
-
-/** Global interceptors: normalize token & handle 401/403 */
-api.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? normalizeBearer(localStorage.getItem('token')) : null;
-  if (token) {
-    config.headers = { ...(config.headers || {}), Authorization: token } as any;
-  }
-  config.withCredentials = true;
-  return config;
-});
-
-api.interceptors.response.use(
-  (r) => r,
-  (err) => {
-    const status = err?.response?.status;
-    if (status === 401 || status === 403) {
-      try {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('role');
-          // Redirect to login/home
-          window.location.replace('/');
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return Promise.reject(err);
-  }
-);
-
 /* ============================= API ============================= */
-/** NOTE: `api` baseURL already includes `/api`; use `/studio/*` paths here. */
+/** NOTE: our shared axios client `http` already has baseURL `/api` and attaches Authorization. */
 export const studioApi = {
   async getModels() {
-    const r = await api.get<{ models: StudioModel[] }>('/studio/models', authCfg());
+    const r = await http.get<{ models: StudioModel[] }>('/studio/models');
     return r.data.models;
   },
 
@@ -146,36 +102,30 @@ export const studioApi = {
       ...params,
       q: params.q?.trim() || undefined,
     };
-    const r = await api.get<RowsResp>('/studio/rows', authCfg({ params: cleanParams }));
+    const r = await http.get<RowsResp>('/studio/rows', { params: cleanParams });
     return r.data;
   },
 
   /** POST /api/studio/rows/:model  (body = data) */
   async create(model: string, data: Record<string, any>) {
-    const r = await api.post(
-      `/studio/rows/${encodeURIComponent(model)}`,
-      cleanData(data),
-      authCfg()
-    );
+    const r = await http.post(`/studio/rows/${encodeURIComponent(model)}`, cleanData(data));
     return r.data;
-  },
+    },
 
   /** PATCH /api/studio/rows/:model/:id  (body = partial fields) */
   async update(model: string, id: any, data: Record<string, any>) {
-    const r = await api.patch(
+    const r = await http.patch(
       `/studio/rows/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
-      cleanData(data),
-      authCfg()
+      cleanData(data)
     );
     return r.data;
   },
 
   /** POST /api/studio/rows/:model/bulk-delete  (body = { ids: [...] }) */
   async destroy(model: string, ids: any[]) {
-    const r = await api.post(
+    const r = await http.post(
       `/studio/rows/${encodeURIComponent(model)}/bulk-delete`,
-      { ids },
-      authCfg()
+      { ids }
     );
     return r.data;
   },

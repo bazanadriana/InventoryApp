@@ -1,3 +1,4 @@
+import "./setupNoCookies";            
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -6,7 +7,7 @@ import App from './App';
 import './index.css';
 import { AuthProvider } from './hooks/useAuth';
 
-/** ---------- API base & credentials (Bearer tokens, no cookies) ---------- */
+/** API base (Bearer tokens, no cookies) */
 export const API_BASE =
   import.meta.env.VITE_API_BASE ??
   (window.location.hostname.includes('netlify')
@@ -14,13 +15,11 @@ export const API_BASE =
     : 'http://localhost:4000/api');
 
 axios.defaults.baseURL = API_BASE;
-// ❗ We are NOT using cookies for auth; rely on Authorization: Bearer <jwt>
-axios.defaults.withCredentials = false;
+axios.defaults.withCredentials = false;   // ⬅️ ensure global default is off
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      {/* Wrap once at the root so auth state is available everywhere */}
       <AuthProvider>
         <App />
       </AuthProvider>

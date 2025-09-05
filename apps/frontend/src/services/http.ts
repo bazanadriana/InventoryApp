@@ -2,34 +2,29 @@ import axios, { AxiosHeaders, type AxiosRequestHeaders } from "axios";
 import { API_BASE, getAuthToken } from "./api";
 
 // Normalize base (no trailing slash)
-const BASE = (API_BASE || "").replace(/\/+$/, "");
+const BASE = (API_BASE || "").replace(/\/+$/, "");       // ✅ API_BASE (not APT_BASE)
 const BASE_URL = new URL(BASE); // e.g. https://inventoryapp-14ez.onrender.com/api
 
 const http = axios.create({
   baseURL: BASE,
-  withCredentials: false, // ❌ no cookies; we use Authorization: Bearer
-  headers: {
-    Accept: "application/json",
-  },
+  withCredentials: false, // ❌ no cookies; use Authorization: Bearer
+  headers: { Accept: "application/json" },
 });
 
-// Only add Authorization for our API origin+path
 function isOurApiRequest(config: any): boolean {
   try {
     const resolved = new URL(config.url ?? "", config.baseURL ?? http.defaults.baseURL);
-    return (
-      resolved.origin === BASE_URL.origin &&
-      resolved.pathname.startsWith(BASE_URL.pathname)
-    );
+    return resolved.origin === BASE_URL.origin && resolved.pathname.startsWith(BASE_URL.pathname);
   } catch {
     return false;
   }
 }
 
 http.interceptors.request.use((config) => {
-  // Belt & suspenders: force no cookies on every request
+  // Belt & suspenders: never send cookies
   config.withCredentials = false;
 
+  // Attach Bearer only to our API
   if (isOurApiRequest(config)) {
     const token = getAuthToken();
     if (token) {
@@ -43,12 +38,10 @@ http.interceptors.request.use((config) => {
     }
   }
 
-  // JSON by default for non-FormData writes
+  // Default JSON for non-FormData writes
   const method = (config.method || "get").toLowerCase();
   const isWrite = method !== "get" && method !== "head";
-  const isFormData =
-    typeof FormData !== "undefined" && config.data instanceof FormData;
-
+  const isFormData = typeof FormData !== "undefined" && config.data instanceof FormData;
   if (isWrite && !isFormData) {
     if (config.headers instanceof AxiosHeaders) {
       if (!config.headers.has("Content-Type")) config.headers.set("Content-Type", "application/json");
@@ -58,7 +51,6 @@ http.interceptors.request.use((config) => {
       config.headers = hdrs;
     }
   }
-
   return config;
 });
 
