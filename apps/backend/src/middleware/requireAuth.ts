@@ -26,7 +26,9 @@ export default function requireAuth(req: Request & { auth?: any }, res: Response
     const token = getBearer(req);
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-    const payload = jwt.verify(token, JWT_SECRET) as Claims;
+    // Allow a little clock skew to avoid iat/nbf race conditions
+    const payload = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as Claims;
+
     const userId = payload.sub ?? payload.uid ?? payload.id;
     if (userId === undefined || userId === null) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -39,7 +41,8 @@ export default function requireAuth(req: Request & { auth?: any }, res: Response
       raw: payload,
     };
     next();
-  } catch {
+  } catch (e) {
+    // Avoid leaking details in prod
     return res.status(401).json({ error: 'Unauthorized' });
   }
 }

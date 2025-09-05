@@ -22,6 +22,7 @@ const FRONTEND_ORIGIN = (
 ).replace(/\/+$/, '');
 
 const JWT_SECRET: string = process.env.JWT_SECRET || 'change-me';
+const AUTH_DEBUG = process.env.AUTH_DEBUG === '1';
 
 const EXPIRES_IN: SignOptions['expiresIn'] = (() => {
   const raw = process.env.JWT_TTL ?? '7d';
@@ -39,7 +40,7 @@ function signToken(payload: object) {
 }
 
 function bearerRedirect(res: Response, token: string) {
-  // ✅ Redirect with token in query; frontend stores it (localStorage) and uses Bearer
+  // Redirect with token in query; frontend stores it and uses Bearer thereafter
   res.redirect(`${FRONTEND_ORIGIN}/auth/callback?token=${encodeURIComponent(token)}`);
 }
 
@@ -56,41 +57,6 @@ function getBearer(req: Request): string | null {
   if (!scheme || !token) return null;
   if (scheme.toLowerCase() !== 'bearer') return null;
   return token;
-}
-
-// Generic handler to reduce duplication + add rich logging
-function handleCallback(provider: 'google' | 'github') {
-  return (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate(
-      provider,
-      { session: false },
-      async (err: unknown, user: OAuthUser | false, info?: unknown) => {
-        try {
-          if (err) {
-            console.error(`[${provider}] oauth error:`, util.inspect(err, { depth: 4 }));
-            return failureRedirect(res, 'oauth', (err as any)?.message || String(err));
-          }
-          if (req.query?.error) {
-            console.error(`[${provider}] provider returned error query:`, req.query);
-            return failureRedirect(res, 'oauth', String(req.query.error));
-          }
-          if (!user) {
-            console.warn(`[${provider}] no user returned. info=`, util.inspect(info, { depth: 4 }));
-            return failureRedirect(res, 'unauthorized');
-          }
-
-          // Standard JWT subject + claims
-          const token = signToken({ sub: user.id, email: user.email, role: user.role ?? 'user' });
-
-          // ✅ No cookies; pass token to frontend where it will be stored and used as Bearer
-          return bearerRedirect(res, token);
-        } catch (e: any) {
-          console.error(`[${provider}] callback exception:`, e);
-          return failureRedirect(res, 'server', e?.message);
-        }
-      }
-    )(req, res, next);
-  };
 }
 
 /* ---------------------- Initiation routes ---------------------- */
@@ -112,33 +78,68 @@ router.get(
 );
 
 /* ---------------------- Callback routes ------------------------ */
+// NOTE: explicit `err: unknown` here to satisfy noImplicitAny
+function handleCallback(provider: 'google' | 'github') {
+  return (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate(
+      provider,
+      { session: false },
+      async (err: unknown, user: OAuthUser | false, info?: unknown) => {
+        try {
+          if (err) {
+            console.error(`[${provider}] oauth error:`, util.inspect(err, { depth: 4 }));
+            return failureRedirect(res, 'oauth', (err as any)?.message || String(err));
+          }
+          if ((req.query as Record<string, any>)?.error) {
+            console.error(`[${provider}] provider returned error query:`, req.query);
+            return failureRedirect(res, 'oauth', String((req.query as any).error));
+          }
+          if (!user) {
+            console.warn(`[${provider}] no user returned. info=`, util.inspect(info, { depth: 4 }));
+            return failureRedirect(res, 'unauthorized');
+          }
+
+          // Standard JWT subject + claims (Bearer only; no cookies)
+          const token = signToken({ sub: user.id, email: user.email, role: user.role ?? 'user' });
+          return bearerRedirect(res, token);
+        } catch (e: any) {
+          console.error(`[${provider}] callback exception:`, e);
+          return failureRedirect(res, 'server', e?.message);
+        }
+      }
+    )(req, res, next);
+  };
+}
+
 router.get('/google/callback', handleCallback('google'));
 router.get('/github/callback', handleCallback('github'));
 
 /* ---------------------- Session helpers ------------------------ */
-// For Bearer-based auth, backend logout is a no-op (frontend deletes token)
+// Bearer-based auth: backend logout is a no-op; frontend deletes token
 router.post('/logout', (_req, res) => {
   res.status(204).end();
 });
 
-// "Who am I" using Authorization: Bearer <jwt>
+/* ------------------------- Me (Bearer) ------------------------- */
 router.get('/me', (req, res) => {
   try {
     const token = getBearer(req);
     if (!token) return res.status(401).json({ user: null });
 
-    const payload = jwt.verify(token, JWT_SECRET) as any;
+    // Allow small clock skew to avoid iat/nbf races right after login
+    const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as any;
 
     // Accept legacy tokens too (uid/id)
-    const id = payload.sub ?? payload.uid ?? payload.id;
+    const id = p.sub ?? p.uid ?? p.id;
     if (id === undefined || id === null) {
       return res.status(401).json({ user: null });
     }
 
-    return res.json({
-      user: { id, email: payload.email ?? null, role: payload.role ?? 'user' },
-    });
-  } catch {
+    return res.json({ user: { id, email: p.email ?? null, role: p.role ?? 'user' } });
+  } catch (e: any) {
+    if (AUTH_DEBUG) {
+      return res.status(401).json({ user: null, error: e?.name, message: e?.message });
+    }
     return res.status(401).json({ user: null });
   }
 });
