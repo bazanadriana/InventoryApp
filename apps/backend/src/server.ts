@@ -70,7 +70,7 @@ function isAllowedOrigin(origin?: string | null) {
   const norm = normalizeOrigin(origin);
   if (allowlist.has(norm)) return true;
 
-  // Optional: allow Netlify branch/preview subdomains for THIS site only:
+  // Allow Netlify branch/preview subdomains for THIS site only:
   // e.g., feature-123--inventory-app-2025.netlify.app
   if (FRONTEND_HOST && FRONTEND_HOST.endsWith('.netlify.app')) {
     try {
@@ -95,7 +95,8 @@ const corsOptions: CorsOptions = {
   // ✅ We’re not using cookies for auth; rely on Authorization: Bearer
   credentials: false,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  // ⬅️ include X-Requested-With and Accept to satisfy preflights in Safari/Chrome
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   optionsSuccessStatus: 204,
   maxAge: 86400, // cache preflight for a day
 };
@@ -104,11 +105,9 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
 /* -------------------------- Middleware -------------------------- */
-// Keep helmet; default is fine. If you embed cross-origin images, you can tweak CORP.
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
-// cookieParser is harmless even if we don't use auth cookies elsewhere.
 app.use(cookieParser());
 app.use(passport.initialize());
 
