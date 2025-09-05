@@ -9,17 +9,14 @@ const http = axios.create({
   baseURL: BASE,
   withCredentials: false, // ❌ no cookies; we use Authorization: Bearer
   headers: {
-    "X-Requested-With": "XMLHttpRequest",
     Accept: "application/json",
   },
 });
 
-// Helper: is this request going to OUR API (same origin + path prefix)?
+// Only add Authorization for our API origin+path
 function isOurApiRequest(config: any): boolean {
   try {
-    // If config.url is relative, URL() will resolve against baseURL
     const resolved = new URL(config.url ?? "", config.baseURL ?? http.defaults.baseURL);
-    // Same origin AND path starts with our BASE path (/api)
     return (
       resolved.origin === BASE_URL.origin &&
       resolved.pathname.startsWith(BASE_URL.pathname)
@@ -30,9 +27,11 @@ function isOurApiRequest(config: any): boolean {
 }
 
 http.interceptors.request.use((config) => {
-  // Only attach Authorization for our own API
+  // Belt & suspenders: force no cookies on every request
+  config.withCredentials = false;
+
   if (isOurApiRequest(config)) {
-    const token = getAuthToken(); // ← single source of truth
+    const token = getAuthToken();
     if (token) {
       if (!config.headers) {
         config.headers = { Authorization: `Bearer ${token}` } as AxiosRequestHeaders;
@@ -44,7 +43,7 @@ http.interceptors.request.use((config) => {
     }
   }
 
-  // Content-Type: application/json for non-FormData writes
+  // JSON by default for non-FormData writes
   const method = (config.method || "get").toLowerCase();
   const isWrite = method !== "get" && method !== "head";
   const isFormData =
@@ -66,7 +65,6 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (res) => res,
   (err) => {
-    // Your useAuth hook listens to this via onUnauthorized()
     const status = err?.response?.status;
     if (status === 401 || status === 403) {
       window.dispatchEvent(new CustomEvent("http:unauthorized"));
