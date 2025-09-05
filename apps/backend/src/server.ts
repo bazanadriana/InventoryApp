@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import passport from 'passport';
 import './config/passport';
-
+import debugRoutes from './routes/debugRoutes';
 import searchRoutes from './routes/search.routes';
 import itemsRoutes from './routes/itemsRoutes';
 import fieldsRoutes from './routes/fieldsRoutes';
@@ -143,6 +143,7 @@ app.use('/api', customIdRoutes);
 app.use('/api', membersRoutes);
 app.use('/api', commentsRoutes);
 app.use('/api', likesRoutes);
+app.use('/api', debugRoutes);
 
 // Initialize full-text setup (non-blocking)
 initFTS().catch(console.error);
