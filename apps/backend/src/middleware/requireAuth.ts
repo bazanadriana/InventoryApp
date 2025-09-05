@@ -1,31 +1,74 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-type JwtShape = { sub?: number | string; role?: 'admin' | 'user' };
+const JWT_SECRET: string = process.env.JWT_SECRET || 'change-me';
 
-export default function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  const token =
-    (header && header.startsWith('Bearer ') ? header.slice(7) : undefined) ||
-    (req.cookies?.token as string | undefined);
+export type AuthPayload = {
+  sub?: string | number;
+  uid?: string | number;
+  id?: string | number;
+  email?: string | null;
+  role?: 'admin' | 'user' | string;
+  [k: string]: any;
+};
 
-  if (!token) return res.status(401).json({ error: 'Missing token' });
+export interface AuthedRequest extends Request {
+  auth?: {
+    userId: string | number;
+    email?: string | null;
+    role?: string;
+    raw: AuthPayload;
+  };
+}
+
+function getBearer(req: Request): string | null {
+  const h = req.headers['authorization'];
+  if (!h) return null;
+  const [scheme, token] = String(h).split(' ');
+  if (!scheme || !token) return null;
+  if (scheme.toLowerCase() !== 'bearer') return null;
+  return token;
+}
+
+/**
+ * Accepts tokens signed with payloads that use any of: sub | uid | id
+ * Attaches req.auth = { userId, email, role, raw }
+ */
+export default function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  // Always let CORS preflights through
+  if (req.method === 'OPTIONS') return next();
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    if (typeof decoded !== 'object' || decoded === null) {
-      return res.status(401).json({ error: 'Invalid token' });
+    const token =
+      getBearer(req) ||
+      // fallback for local dev if someone still has a cookie from older builds
+      (req as any).cookies?.token ||
+      null;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { sub, role } = decoded as JwtShape;
-    const id = typeof sub === 'string' ? Number(sub) : sub;
-    if (!id || Number.isNaN(id)) {
-      return res.status(401).json({ error: 'Invalid token subject' });
+    const payload = jwt.verify(token, JWT_SECRET) as AuthPayload;
+
+    const userId =
+      payload.sub ??
+      payload.uid ??
+      payload.id;
+
+    if (userId === undefined || userId === null) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    req.user = { id: Number(id), role: role ?? 'user' };
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid token' });
+    req.auth = {
+      userId,
+      email: payload.email ?? null,
+      role: payload.role ?? 'user',
+      raw: payload,
+    };
+
+    return next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 }
