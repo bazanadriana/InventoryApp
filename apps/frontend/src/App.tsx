@@ -5,13 +5,14 @@ import Home from "./pages/Home";
 import NotFound from "./routes/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import Logout from "./pages/Logout";
-import Dashboard from "./pages/Dashboard";
+// import Dashboard from "./pages/Dashboard"; // ❌ not used; StudioDashboard is the authed page
 import StudioDashboard from "./pages/StudioDashboard";
 import { useAuth } from "./hooks/useAuth";
 
-/** Simple auth gate */
+/** Simple auth gate that WAITS for authReady (prevents Safari bounce) */
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { isAuthed } = useAuth();
+  const { authReady, isAuthed } = useAuth();
+  if (!authReady) return <div className="p-6 text-center">Loading…</div>;
   return isAuthed ? children : <Navigate to="/login" replace />;
 }
 
@@ -27,13 +28,15 @@ export default function App() {
           {/* handy aliases */}
           <Route path="/signin" element={<Navigate to="/login" replace />} />
           <Route path="/auth" element={<Navigate to="/login" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
 
-          {/* OAuth helpers */}
-          <Route path="/oauth/callback" element={<OAuthCallback />} />
+          {/* OAuth callback (backend now redirects to /auth/callback?token=...) */}
+          <Route path="/auth/callback" element={<OAuthCallback />} />
+          {/* keep legacy alias if old links exist */}
+          <Route path="/oauth/callback" element={<Navigate to="/auth/callback" replace />} />
+
           <Route path="/logout" element={<Logout />} />
 
-          {/* App */}
+          {/* Protected App */}
           <Route
             path="/dashboard"
             element={
@@ -42,6 +45,7 @@ export default function App() {
               </RequireAuth>
             }
           />
+
           {/* keep /admin as alias */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
 

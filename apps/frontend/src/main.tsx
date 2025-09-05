@@ -4,8 +4,9 @@ import { BrowserRouter } from 'react-router-dom';
 import axios from 'axios';
 import App from './App';
 import './index.css';
+import { AuthProvider } from './hooks/useAuth';
 
-/** ---------- API base & credentials ---------- */
+/** ---------- API base & credentials (Bearer tokens, no cookies) ---------- */
 export const API_BASE =
   import.meta.env.VITE_API_BASE ??
   (window.location.hostname.includes('netlify')
@@ -13,13 +14,17 @@ export const API_BASE =
     : 'http://localhost:4000/api');
 
 axios.defaults.baseURL = API_BASE;
-axios.defaults.withCredentials = true; // send cookies on cross-site requests
+// ❗ We are NOT using cookies for auth; rely on Authorization: Bearer <jwt>
+axios.defaults.withCredentials = false;
 axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      {/* Wrap once at the root so auth state is available everywhere */}
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

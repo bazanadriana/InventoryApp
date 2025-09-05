@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 function getParamFromHash(name: string): string | null {
@@ -10,7 +10,7 @@ function getParamFromHash(name: string): string | null {
 
 /** Ensure we store only the raw JWT (no "Bearer " prefix) */
 function stripBearer(t: string) {
-  return t.startsWith("Bearer ") ? t.slice("Bearer ".length) : t;
+  return t?.startsWith("Bearer ") ? t.slice("Bearer ".length) : t;
 }
 
 /** Very simple open-redirect guard */
@@ -21,7 +21,6 @@ function sanitizeNext(next: string | null | undefined) {
 
 export default function OAuthCallback() {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const { saveToken } = useAuth();
   const ran = useRef(false); // avoid double-run in StrictMode
 
@@ -49,40 +48,33 @@ export default function OAuthCallback() {
     // If backend sign-in failed, it may send ?err=...
     const err = params.get("err");
     if (err && !rawToken) {
-      navigate(`/login?err=${encodeURIComponent(err)}`, { replace: true });
+      setTimeout(() => window.location.replace(`/login?err=${encodeURIComponent(err)}`), 0);
       return;
     }
 
     if (rawToken) {
       // Store only the JWT string (without 'Bearer ')
       const jwt = stripBearer(rawToken);
-      saveToken(jwt); // useAuth should put it in localStorage
+      saveToken(jwt); // useAuth saves to localStorage & broadcasts
 
-      // Optional: support role/uid via params if you pass them (non-breaking)
+      // Optional: support role via params if you pass it
       const role = params.get("role") || getParamFromHash("role");
       if (role) localStorage.setItem("role", role);
 
-      // Redirect target
+      // Compute safe redirect target
       const safeNext = sanitizeNext(params.get("next") || getParamFromHash("next"));
 
-      // Clean URL (remove token from address bar) & navigate
-      window.history.replaceState({}, "", safeNext);
-      navigate(safeNext, { replace: true });
-
-      // Belt & suspenders: ensure navigation even if router guards race
-      setTimeout(() => {
-        if (window.location.pathname + window.location.search !== safeNext) {
-          window.location.replace(safeNext);
-        }
-      }, 0);
+      // Hard replace keeps callback page out of history and avoids guard races.
+      // Timeout lets storage/event flush on Safari/iOS before navigation.
+      setTimeout(() => window.location.replace(safeNext), 0);
     } else {
       // No token and no explicit error → bounce to login
-      navigate("/login?err=missing_token", { replace: true });
+      setTimeout(() => window.location.replace("/login?err=missing_token"), 0);
     }
-  }, [params, navigate, saveToken]);
+  }, [params, saveToken]);
 
   return (
-    <div className="min-h-[60vh] grid place-items-center text-slate-300">
+    <div className="min-h-[60vh] grid place-items-center text-slate-500">
       Completing sign-in…
     </div>
   );

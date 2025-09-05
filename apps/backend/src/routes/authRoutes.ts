@@ -23,17 +23,12 @@ const FRONTEND_ORIGIN = (
 
 const JWT_SECRET: string = process.env.JWT_SECRET || 'change-me';
 
-// Narrow the type for expiresIn to what jsonwebtoken expects
 const EXPIRES_IN: SignOptions['expiresIn'] = (() => {
   const raw = process.env.JWT_TTL ?? '7d';
   if (typeof raw === 'number') return raw;           // seconds
   if (/^\d+$/.test(String(raw))) return Number(raw); // numeric string => seconds
   return String(raw) as SignOptions['expiresIn'];    // e.g., "7d", "12h"
 })();
-
-// SameSite=None requires Secure=true on HTTPS
-const COOKIE_SECURE = FRONTEND_ORIGIN.startsWith('https');
-const COOKIE_SAMESITE: 'none' | 'lax' = COOKIE_SECURE ? 'none' : 'lax';
 
 /* --------------------------- Helpers --------------------------- */
 type OAuthUser = { id: number; email: string | null; role?: 'admin' | 'user' };
@@ -43,27 +38,24 @@ function signToken(payload: object) {
   return jwt.sign(payload, JWT_SECRET, opts);
 }
 
-function setAuthCookie(res: Response, token: string) {
-  // Default ~7 days; if EXPIRES_IN is a number (seconds) we honor it
-  let maxAgeMs = 7 * 24 * 60 * 60 * 1000;
-  if (typeof EXPIRES_IN === 'number') maxAgeMs = EXPIRES_IN * 1000;
-
-  res.cookie('token', token, {
-    httpOnly: true,
-    secure: COOKIE_SECURE,
-    sameSite: COOKIE_SAMESITE,
-    path: '/',
-    maxAge: maxAgeMs,
-  });
-}
-
-function successRedirect(res: Response) {
-  res.redirect(`${FRONTEND_ORIGIN}/dashboard`);
+function bearerRedirect(res: Response, token: string) {
+  // ✅ Redirect with token in query; frontend stores it (localStorage)
+  res.redirect(`${FRONTEND_ORIGIN}/auth/callback?token=${encodeURIComponent(token)}`);
 }
 
 function failureRedirect(res: Response, code = 'oauth', detail?: string) {
   const d = detail ? `&detail=${encodeURIComponent(detail)}` : '';
   res.redirect(`${FRONTEND_ORIGIN}/login?err=${encodeURIComponent(code)}${d}`);
+}
+
+// Extract "Bearer <token>" from Authorization header
+function getBearer(req: Request): string | null {
+  const h = req.headers['authorization'];
+  if (!h) return null;
+  const [scheme, token] = h.split(' ');
+  if (!scheme || !token) return null;
+  if (scheme.toLowerCase() !== 'bearer') return null;
+  return token;
 }
 
 // Generic handler to reduce duplication + add rich logging
@@ -87,10 +79,11 @@ function handleCallback(provider: 'google' | 'github') {
             return failureRedirect(res, 'unauthorized');
           }
 
-          // Use sub to align with requireAuth.ts
+          // Standard JWT subject + claims
           const token = signToken({ sub: user.id, email: user.email, role: user.role ?? 'user' });
-          setAuthCookie(res, token);
-          return successRedirect(res);
+
+          // ✅ No cookies; pass token to frontend where it will be stored and used as Bearer
+          return bearerRedirect(res, token);
         } catch (e: any) {
           console.error(`[${provider}] callback exception:`, e);
           return failureRedirect(res, 'server', e?.message);
@@ -123,17 +116,20 @@ router.get('/google/callback', handleCallback('google'));
 router.get('/github/callback', handleCallback('github'));
 
 /* ---------------------- Session helpers ------------------------ */
+// For Bearer-based auth, backend logout is a no-op (frontend deletes token)
 router.post('/logout', (_req, res) => {
-  res.clearCookie('token', { path: '/', sameSite: COOKIE_SAMESITE, secure: COOKIE_SECURE });
   res.status(204).end();
 });
 
+// "Who am I" using Authorization: Bearer <jwt>
 router.get('/me', (req, res) => {
   try {
-    const token = req.cookies?.token as string | undefined;
+    const token = getBearer(req);
     if (!token) return res.status(401).json({ user: null });
     const payload = jwt.verify(token, JWT_SECRET) as any;
-    return res.json({ user: { id: payload.sub, email: payload.email, role: payload.role ?? 'user' } });
+    return res.json({
+      user: { id: payload.sub, email: payload.email, role: payload.role ?? 'user' },
+    });
   } catch {
     return res.status(401).json({ user: null });
   }

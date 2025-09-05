@@ -15,8 +15,9 @@ const CLIENT_URL = (
 const JWT_SECRET: string = process.env.JWT_SECRET || 'change-me';
 
 function issueToken(user: any) {
+  // Use "sub" so it plays nice with standard JWT libraries
   return jwt.sign(
-    { uid: user?.id, role: user?.role ?? 'user' },
+    { sub: user?.id, email: user?.email ?? null, role: user?.role ?? 'user' },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -44,7 +45,8 @@ router.get(
   passport.authenticate('google', { failureRedirect: '/auth/failure', session: false }),
   (req: Request, res: Response) => {
     const token = issueToken((req as any).user);
-    res.redirect(`${CLIENT_URL}#/auth/callback?token=${encodeURIComponent(token)}`);
+    // ✅ Real path (no "#") so BrowserRouter handles it reliably in Safari/iOS
+    res.redirect(`${CLIENT_URL}/auth/callback?token=${encodeURIComponent(token)}`);
   }
 );
 
@@ -53,7 +55,8 @@ router.get(
   passport.authenticate('github', { failureRedirect: '/auth/failure', session: false }),
   (req: Request, res: Response) => {
     const token = issueToken((req as any).user);
-    res.redirect(`${CLIENT_URL}#/auth/callback?token=${encodeURIComponent(token)}`);
+    // ✅ Real path (no "#")
+    res.redirect(`${CLIENT_URL}/auth/callback?token=${encodeURIComponent(token)}`);
   }
 );
 
