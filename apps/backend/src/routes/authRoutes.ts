@@ -41,13 +41,20 @@ function signToken(payload: object) {
 
 /** ✅ Send token in URL hash so it never becomes a query param */
 function bearerRedirect(res: Response, token: string) {
-  // Example: https://your-site/auth/callback#token=eyJhbGci...
-  res.redirect(`${FRONTEND_ORIGIN}/auth/callback#token=${encodeURIComponent(token)}`);
+  const loc = `${FRONTEND_ORIGIN}/auth/callback#token=${encodeURIComponent(token)}`;
+  if (AUTH_DEBUG) {
+    console.log('[auth] redirecting to:', loc.slice(0, 160) + '…');
+  }
+  res.redirect(loc);
 }
 
 function failureRedirect(res: Response, code = 'oauth', detail?: string) {
   const d = detail ? `&detail=${encodeURIComponent(detail)}` : '';
-  res.redirect(`${FRONTEND_ORIGIN}/login?err=${encodeURIComponent(code)}${d}`);
+  const loc = `${FRONTEND_ORIGIN}/login?err=${encodeURIComponent(code)}${d}`;
+  if (AUTH_DEBUG) {
+    console.warn('[auth] failureRedirect ->', loc);
+  }
+  res.redirect(loc);
 }
 
 // Extract "Bearer <token>" from Authorization header
@@ -88,24 +95,24 @@ function handleCallback(provider: 'google' | 'github') {
         try {
           if (err) {
             console.error(`[${provider}] oauth error:`, util.inspect(err, { depth: 4 }));
-            return failureRedirect(res, 'oauth', (err as any)?.message || String(err));
+            return failureRedirect(res, 'oauth', (err as Error)?.message || String(err));
           }
-          if ((req.query as Record<string, any>)?.error) {
+          if ((req.query as Record<string, unknown>)?.error) {
             console.error(`[${provider}] provider returned error query:`, req.query);
-            return failureRedirect(res, 'oauth', String((req.query as any).error));
+            return failureRedirect(res, 'oauth', String((req.query as Record<string, unknown>).error));
           }
           if (!user) {
             console.warn(`[${provider}] no user returned. info=`, util.inspect(info, { depth: 4 }));
             return failureRedirect(res, 'unauthorized');
           }
 
-          // Standard JWT subject + claims (Bearer only; no cookies)
+          // Bearer-only flow: send a signed JWT (sub/email/role) to the frontend in the URL hash
           const token = signToken({ sub: user.id, email: user.email, role: user.role ?? 'user' });
-
           return bearerRedirect(res, token);
-        } catch (e: any) {
+        } catch (e) {
           console.error(`[${provider}] callback exception:`, e);
-          return failureRedirect(res, 'server', e?.message);
+          const msg = (e as Error)?.message;
+          return failureRedirect(res, 'server', msg);
         }
       }
     )(req, res, next);
@@ -128,44 +135,51 @@ router.get('/me', (req, res) => {
     if (!token) return res.status(401).json({ user: null });
 
     // Allow small clock skew to avoid iat/nbf races right after login
-    const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as any;
+    const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as Record<string, unknown>;
 
     // Accept legacy tokens too (uid/id)
-    const id = p.sub ?? p.uid ?? p.id;
+    const id = (p.sub ?? p.uid ?? p.id) as string | number | undefined | null;
     if (id === undefined || id === null) {
       return res.status(401).json({ user: null });
     }
 
-    return res.json({ user: { id, email: p.email ?? null, role: p.role ?? 'user' } });
-  } catch (e: any) {
+    return res.json({ user: { id, email: (p.email as string) ?? null, role: (p.role as string) ?? 'user' } });
+  } catch (e) {
     if (AUTH_DEBUG) {
-      return res.status(401).json({ user: null, error: e?.name, message: e?.message });
+      const err = e as { name?: string; message?: string };
+      return res.status(401).json({ user: null, error: err.name, message: err.message });
     }
     return res.status(401).json({ user: null });
   }
 });
 
 /* ----------------------- Verify (debug) ------------------------ */
-// Optional helper for quick token checks during debugging
 router.get('/verify-token', (req, res) => {
   try {
     const token = getBearer(req);
     if (!token) return res.status(401).json({ ok: false, error: 'no_token' });
-    const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as any;
+    const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as Record<string, unknown>;
     const id = p.sub ?? p.uid ?? p.id ?? null;
     return res.json({ ok: true, id, email: p.email ?? null, role: p.role ?? 'user', exp: p.exp });
-  } catch (e: any) {
-    return res.status(401).json({ ok: false, name: e?.name, message: e?.message });
+  } catch (e) {
+    const err = e as { name?: string; message?: string };
+    return res.status(401).json({ ok: false, name: err.name, message: err.message });
   }
 });
 
-/* -------------------------- Debug ------------------------------ */
+/* ------------------------ Debug helpers ------------------------ */
 router.get('/debug/callbacks', (_req, res) => {
   res.json({
     google: `${BACKEND_BASE}${API_PREFIX}/auth/google/callback`,
     github: `${BACKEND_BASE}${API_PREFIX}/auth/github/callback`,
     frontend: FRONTEND_ORIGIN,
   });
+});
+
+// Issue a throwaway JWT and redirect with #token=… to prove end-to-end
+router.get('/debug/issue-token', (_req, res) => {
+  const token = signToken({ sub: 'debug-user', email: 'debug@example.com', role: 'user' });
+  return bearerRedirect(res, token);
 });
 
 export default router;
