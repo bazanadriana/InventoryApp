@@ -12,15 +12,14 @@ const DMMF = (Prisma as any).dmmf as {
 type ScalarKind = 'scalar' | 'enum';
 type FieldMeta = {
   name: string;
-  type: string;
+  type: string;             // target model name for relations, scalar type for scalars
   kind: ScalarKind | 'object';
   isId?: boolean;
   isRequired?: boolean;
   isList?: boolean;
   isReadOnly?: boolean;
   hasDefaultValue?: boolean;
-  /** When a relation stores scalar FK(s) on this model, they appear here */
-  relationFromFields?: string[];
+  relationFromFields?: string[]; // scalar FK fields on THIS model
 };
 
 type ModelMeta = {
@@ -78,10 +77,8 @@ function pickScalarData(
   for (const k of Object.keys(raw ?? {})) {
     if (allowed.has(k)) data[k] = raw[k];
   }
-  // Never allow changing id or updatedAt directly
-  if (model.idField) delete data[model.idField.name];
+  if (model.idField) delete data[model.idField.name]; // never allow id
   if ('updatedAt' in data) delete data.updatedAt;
-  // Allow createdAt only on create if asked
   if (!opts?.allowTimestampsOnCreate && 'createdAt' in data) delete data.createdAt;
   return data;
 }
@@ -111,7 +108,7 @@ function resolveUserId(req: any, raw?: Record<string, any>) {
     raw?.userId ??
     raw?.userid ??
     req?.user?.id ??
-    req?.user?.userId ??
+    req?.auth?.userId ??
     req?.user?.sub;
   const n = typeof candidate === 'string' ? Number(candidate) : candidate;
   return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
@@ -119,8 +116,7 @@ function resolveUserId(req: any, raw?: Record<string, any>) {
 
 /**
  * Convert synthetic `<relation>NameId` fields to `{ relationName: { connect: { id } } }`.
- * NOTE: We **always** connect the User relation via `{ user: { connect: { id } } }` on create
- * to avoid naming mismatches like `userid` vs `userId`.
+ * NOTE: We **always** connect the User relation via `{ user: { connect: { id } } }` on create.
  */
 function buildSyntheticConnects(
   model: ModelMeta,
@@ -133,26 +129,22 @@ function buildSyntheticConnects(
   for (const f of model.fields) {
     if (f.kind !== 'object' || f.isList) continue;
 
-    // --- Always object-connect User on create if we can resolve the id ---
+    // User auto-connect on create
     if (onCreate && f.type === 'User') {
       const uid = resolveUserId(req, raw);
-      if (uid != null) {
-        out[f.name] = { connect: { id: uid } };
-      }
-      continue; // user handled above
+      if (uid != null) out[f.name] = { connect: { id: uid } };
+      continue;
     }
 
-    // --- Synthetic "<relation>Id" when the relation does NOT expose a scalar FK ---
+    // Only synthesize for relations WITHOUT scalar FKs
     const hasScalarFk =
       Array.isArray(f.relationFromFields) && f.relationFromFields.length > 0;
     if (!hasScalarFk) {
-      const syntheticKey = `${f.name}Id`; // e.g. "itemId" for relation field "item"
+      const syntheticKey = `${f.name}Id`; // e.g. "itemId" for relation "item"
       const rawVal = raw?.[syntheticKey];
       if (rawVal !== '' && rawVal != null) {
         const idNum = Number(rawVal);
-        if (!Number.isNaN(idNum)) {
-          out[f.name] = { connect: { id: idNum } };
-        }
+        if (!Number.isNaN(idNum)) out[f.name] = { connect: { id: idNum } };
       }
     }
   }
@@ -166,12 +158,12 @@ function dropScalarFkWhenObjectConnect(model: ModelMeta, payload: Record<string,
     if (f.kind !== 'object' || f.isList) continue;
     const fk = f.relationFromFields?.[0];
     if (fk && payload[f.name]?.connect?.id != null && fk in payload) {
-      delete payload[fk]; // prefer the object connect
+      delete payload[fk]; // prefer object connect
     }
   }
 }
 
-/** After composing payload, ensure required relations are satisfied (nice error) */
+/** Ensure required relations are present */
 function ensureRequiredRelations(model: ModelMeta, payload: Record<string, any>) {
   for (const f of model.fields) {
     if (f.kind !== 'object' || f.isList || !f.isRequired) continue;
@@ -182,14 +174,66 @@ function ensureRequiredRelations(model: ModelMeta, payload: Record<string, any>)
 
     if (!hasObjectConnect && !hasScalarFk) {
       if (f.type === 'User') {
-        throw new Error(
-          'User relation is required. Make sure you are authenticated or provide a userId.'
+        throw Object.assign(
+          new Error(
+            'User relation is required. Make sure you are authenticated or provide a userId.'
+          ),
+          { status: 400 }
         );
       }
-      throw new Error(
-        `Required relation "${f.name}" is missing. Provide "${f.name}Id" or a "${f.name}: { connect: { id } }".`
+      throw Object.assign(
+        new Error(
+          `Required relation "${f.name}" is missing. Provide "${f.name}Id" or "${f.name}: { connect: { id } }".`
+        ),
+        { status: 400 }
       );
     }
+  }
+}
+
+/** Validate that any referenced related ids actually exist (gives 400 instead of Prisma P2025) */
+async function validateRelatedExistence(model: ModelMeta, payload: Record<string, any>) {
+  const checks: Array<Promise<{ ok: boolean; msg?: string }>> = [];
+
+  for (const f of model.fields) {
+    if (f.kind !== 'object' || f.isList) continue;
+
+    const delegate = delegateFor(f.type);
+    if (!delegate) continue;
+
+    // Object connect?
+    const cid = payload[f.name]?.connect?.id;
+    if (cid != null) {
+      const idVal = Number(cid);
+      checks.push(
+        (prisma as any)[delegate]
+          .count({ where: { id: idVal } })
+          .then((n: number) => ({
+            ok: n > 0,
+            msg: n > 0 ? undefined : `Related ${f.type} not found for id ${idVal} (field "${f.name}").`,
+          }))
+      );
+    }
+
+    // Scalar FK present without object connect?
+    const fk = f.relationFromFields?.[0];
+    if (fk && payload[fk] != null && !(payload[f.name]?.connect)) {
+      const idVal = Number(payload[fk]);
+      checks.push(
+        (prisma as any)[delegate]
+          .count({ where: { id: idVal } })
+          .then((n: number) => ({
+            ok: n > 0,
+            msg: n > 0 ? undefined : `Related ${f.type} not found for id ${idVal} (field "${fk}").`,
+          }))
+      );
+    }
+  }
+
+  const results = await Promise.all(checks);
+  const bad = results.filter(r => !r.ok).map(r => r.msg) as string[];
+  if (bad.length) {
+    throw Object.assign(new Error(bad.join(' ')), { status: 400 });
   }
 }
 
@@ -198,7 +242,7 @@ function chooseSortKey(model: ModelMeta, requested?: string): string | undefined
   const scalarNames = new Set(model.scalarFields.map((f) => f.name));
   if (requested && scalarNames.has(requested)) return requested;
   if (model.idField && scalarNames.has(model.idField.name)) return model.idField.name;
-  return model.scalarFields[0]?.name; // fall back to first scalar or undefined
+  return model.scalarFields[0]?.name;
 }
 
 /** Coerce id type for update where clause */
@@ -214,7 +258,6 @@ function coerceId(model: ModelMeta, id: any) {
 
 /* =============================== ROUTES =============================== */
 
-/** /api/studio/models  -> list models, fields, counts */
 router.get('/models', async (_req, res) => {
   const payload = await Promise.all(
     MODELS.map(async (m) => {
@@ -240,16 +283,11 @@ router.get('/models', async (_req, res) => {
   res.json({ models: payload });
 });
 
-/** /api/studio/rows?model=Item&page=1&perPage=25&sort=id&order=asc&q=text */
 router.get('/rows', async (req, res) => {
   const modelName = String(req.query.model || '');
   const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
-  const perPage = Math.min(
-    100,
-    Math.max(parseInt(String(req.query.perPage || '25'), 10) || 25, 1)
-  );
-  const requestedSort =
-    typeof req.query.sort === 'string' ? req.query.sort : undefined;
+  const perPage = Math.min(100, Math.max(parseInt(String(req.query.perPage || '25'), 10) || 25, 1));
+  const requestedSort = typeof req.query.sort === 'string' ? req.query.sort : undefined;
   const order = String(req.query.order || 'asc') === 'desc' ? 'desc' : 'asc';
   const q = typeof req.query.q === 'string' ? req.query.q : undefined;
 
@@ -257,12 +295,7 @@ router.get('/rows', async (req, res) => {
   if (!model) return res.status(400).json({ error: 'Unknown model' });
 
   const where = buildSearchWhere(model, q);
-  const skip = (page - 1) * perPage;
-  const take = perPage;
-
   const sortKey = chooseSortKey(model, requestedSort);
-
-  // select only scalar/enums
   const select = Object.fromEntries(model.scalarFields.map((f) => [f.name, true]));
 
   try {
@@ -272,8 +305,8 @@ router.get('/rows', async (req, res) => {
         where,
         select,
         orderBy: sortKey ? ({ [sortKey]: order } as any) : undefined,
-        skip,
-        take,
+        skip: (page - 1) * perPage,
+        take: perPage,
       }),
     ]);
 
@@ -296,7 +329,6 @@ router.get('/rows', async (req, res) => {
   }
 });
 
-/** Create a record (accept scalars + safe relation connects + synthetic `<rel>Id`) */
 router.post('/create', async (req: any, res) => {
   const { model: modelName, data: rawData } = req.body || {};
   const model = MODELS.find((m) => m.name === modelName);
@@ -305,74 +337,58 @@ router.post('/create', async (req: any, res) => {
   try {
     const scalar = pickScalarData(model, rawData || {}, { allowTimestampsOnCreate: true });
     const patchRelations = pickSafeRelationObjects(model, rawData || {});
-    const syntheticConnect = buildSyntheticConnects(
-      model,
-      rawData || {},
-      /* onCreate */ true,
-      req
-    );
+    const syntheticConnect = buildSyntheticConnects(model, rawData || {}, true, req);
 
-    const payload: Record<string, any> = { ...scalar, ...patchRelations, ...syntheticConnect };
+    const data: Record<string, any> = { ...scalar, ...patchRelations, ...syntheticConnect };
 
-    // If we object-connect a relation that also has a scalar FK in payload, drop the FK (avoid conflicts)
-    dropScalarFkWhenObjectConnect(model, payload);
+    dropScalarFkWhenObjectConnect(model, data);
+    ensureRequiredRelations(model, data);
+    await validateRelatedExistence(model, data);
 
-    // Ensure required relations present (esp. User)
-    ensureRequiredRelations(model, payload);
-
-    const created = await (prisma as any)[model.delegate].create({ data: payload });
+    const created = await (prisma as any)[model.delegate].create({ data });
     return res.status(201).json({ ok: true, row: created });
   } catch (e: any) {
     console.error('Studio /create error:', e);
-    if (e?.code === 'P2002') {
-      return res.status(409).json({ ok: false, error: 'Unique constraint failed.' });
-    }
-    if (e?.code === 'P2003') {
-      return res.status(400).json({ ok: false, error: 'Invalid foreign key value.' });
-    }
-    return res.status(400).json({ ok: false, error: e?.message || String(e) });
+    if (e?.code === 'P2002') return res.status(409).json({ ok: false, error: 'Unique constraint failed.' });
+    if (e?.code === 'P2003') return res.status(400).json({ ok: false, error: 'Invalid foreign key value.' });
+    if (e?.code === 'P2025') return res.status(400).json({ ok: false, error: 'Related record not found.' });
+    const status = e?.status ?? 400;
+    return res.status(status).json({ ok: false, error: e?.message || String(e) });
   }
 });
 
-/** Update a record by id (accept scalars + safe relation connects + synthetic `<rel>Id`) */
 router.patch('/update', async (req, res) => {
   const { model: modelName, id, data: rawData } = req.body || {};
   const model = MODELS.find((m) => m.name === modelName);
-  if (!model || !model.idField)
-    return res.status(400).json({ error: 'Unknown model or id field' });
+  if (!model || !model.idField) return res.status(400).json({ error: 'Unknown model or id field' });
 
   try {
     const where = { [model.idField.name]: coerceId(model, id) } as any;
-
     const scalar = pickScalarData(model, rawData || {}, { allowTimestampsOnCreate: false });
     const patchRelations = pickSafeRelationObjects(model, rawData || {});
     const syntheticConnect = buildSyntheticConnects(model, rawData || {}, false, req);
 
     const data = { ...scalar, ...patchRelations, ...syntheticConnect };
 
-    // Avoid sending both FK scalar and object connect for the same relation
     dropScalarFkWhenObjectConnect(model, data);
+    await validateRelatedExistence(model, data);
 
     const updated = await (prisma as any)[model.delegate].update({ where, data });
     res.json({ ok: true, row: updated });
   } catch (e: any) {
     console.error('Studio /update error:', e);
-    if (e?.code === 'P2002') {
-      return res.status(409).json({ ok: false, error: 'Unique constraint failed.' });
-    }
-    if (e?.code === 'P2003') {
-      return res.status(400).json({ ok: false, error: 'Invalid foreign key value.' });
-    }
-    res.status(400).json({ ok: false, error: e?.message || String(e) });
+    if (e?.code === 'P2002') return res.status(409).json({ ok: false, error: 'Unique constraint failed.' });
+    if (e?.code === 'P2003') return res.status(400).json({ ok: false, error: 'Invalid foreign key value.' });
+    if (e?.code === 'P2025') return res.status(400).json({ ok: false, error: 'Record not found.' });
+    const status = e?.status ?? 400;
+    res.status(status).json({ ok: false, error: e?.message || String(e) });
   }
 });
 
-/** Bulk delete by ids */
 router.delete('/delete', async (req, res) => {
   const { model: modelName, ids } = req.body || {};
   const model = MODELS.find((m) => m.name === modelName);
-  if (!model || !model.idField)
-    return res.status(400).json({ error: 'Unknown model or id field' });
+  if (!model || !model.idField) return res.status(400).json({ error: 'Unknown model or id field' });
 
   try {
     const result = await (prisma as any)[model.delegate].deleteMany({
