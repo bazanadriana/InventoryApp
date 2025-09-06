@@ -2,34 +2,38 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
+function computeBackendBase() {
+  // Prefer configured API root, else fall back to current origin + /api
+  const cfg = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+  const apiRoot =
+    cfg && cfg.length > 0
+      ? cfg
+      : typeof window !== "undefined"
+      ? `${window.location.origin}/api`
+      : "/api";
+  // Normalize and strip trailing /api to get the backend base
+  return apiRoot.replace(/\/+$/, "").replace(/\/api$/, "");
+}
+
 export default function Home() {
-  const { isAuthed, loginGoogle, loginGitHub } = useAuth();
+  const { isAuthed } = useAuth();
   const [loading, setLoading] = useState<"google" | "github" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (isAuthed) return <Navigate to="/dashboard" replace />;
 
-  const startGoogle = () => {
-    try {
-      setError(null);
-      setLoading("google");
-      loginGoogle();
-    } catch (e) {
-      setLoading(null);
-      setError("Couldn’t start Google sign-in. Please try again.");
-      console.error(e);
-    }
-  };
+  const BACKEND_BASE = computeBackendBase();
 
-  const startGitHub = () => {
+  const startOAuth = (provider: "google" | "github") => {
     try {
       setError(null);
-      setLoading("github");
-      loginGitHub();
+      setLoading(provider);
+      // Direct, same-tab navigation (best compatibility with Safari/iOS)
+      window.location.href = `${BACKEND_BASE}/api/auth/${provider}`;
     } catch (e) {
-      setLoading(null);
-      setError("Couldn’t start GitHub sign-in. Please try again.");
       console.error(e);
+      setLoading(null);
+      setError(`Couldn’t start ${provider === "google" ? "Google" : "GitHub"} sign-in. Please try again.`);
     }
   };
 
@@ -47,11 +51,10 @@ export default function Home() {
           {/* GitHub */}
           <button
             type="button"
-            onClick={startGitHub}
-            disabled={loading !== null}
+            onClick={() => startOAuth("github")}
             aria-busy={loading === "github"}
             className="group inline-flex items-center gap-3 rounded-md border border-white/30 px-6 py-4 text-lg font-medium tracking-tight
-                       hover:border-white/60 disabled:opacity-60 disabled:cursor-not-allowed transition text-white"
+                       hover:border-white/60 transition text-white"
             aria-label="Sign in with GitHub"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
@@ -67,11 +70,10 @@ export default function Home() {
           {/* Google */}
           <button
             type="button"
-            onClick={startGoogle}
-            disabled={loading !== null}
+            onClick={() => startOAuth("google")}
             aria-busy={loading === "google"}
             className="group inline-flex items-center gap-3 rounded-md border border-white/30 px-6 py-4 text-lg font-medium tracking-tight
-                       hover:border-white/60 disabled:opacity-60 disabled:cursor-not-allowed transition text-white"
+                       hover:border-white/60 transition text-white"
             aria-label="Sign in with Google"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
