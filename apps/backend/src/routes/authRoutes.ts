@@ -26,9 +26,9 @@ const AUTH_DEBUG = process.env.AUTH_DEBUG === '1';
 
 const EXPIRES_IN: SignOptions['expiresIn'] = (() => {
   const raw = process.env.JWT_TTL ?? '7d';
-  if (typeof raw === 'number') return raw;           // seconds
-  if (/^\d+$/.test(String(raw))) return Number(raw); // numeric string => seconds
-  return String(raw) as SignOptions['expiresIn'];    // e.g., "7d", "12h"
+  if (typeof raw === 'number') return raw;            // seconds
+  if (/^\d+$/.test(String(raw))) return Number(raw);  // numeric string => seconds
+  return String(raw) as SignOptions['expiresIn'];     // e.g., "7d", "12h"
 })();
 
 /* --------------------------- Helpers --------------------------- */
@@ -39,9 +39,10 @@ function signToken(payload: object) {
   return jwt.sign(payload, JWT_SECRET, opts);
 }
 
+/** Send token in URL hash so it never leaves the browser (robust for SPA/CDN). */
 function bearerRedirect(res: Response, token: string) {
-  // Redirect with token in query; frontend stores it and uses Bearer thereafter
-  res.redirect(`${FRONTEND_ORIGIN}/auth/callback?token=${encodeURIComponent(token)}`);
+  // Example final URL: https://site.com/auth/callback#token=eyJhbGci...
+  res.redirect(`${FRONTEND_ORIGIN}/auth/callback#token=${encodeURIComponent(token)}`);
 }
 
 function failureRedirect(res: Response, code = 'oauth', detail?: string) {
@@ -78,7 +79,7 @@ router.get(
 );
 
 /* ---------------------- Callback routes ------------------------ */
-// NOTE: explicit `err: unknown` here to satisfy noImplicitAny
+// NOTE: explicit `err: unknown` to satisfy noImplicitAny
 function handleCallback(provider: 'google' | 'github') {
   return (req: Request, res: Response, next: NextFunction) => {
     passport.authenticate(
