@@ -1,3 +1,4 @@
+// apps/backend/src/routes/authRoutes.ts
 import type { Request, Response, NextFunction } from 'express';
 import { Router } from 'express';
 import passport from 'passport';
@@ -26,9 +27,9 @@ const AUTH_DEBUG = process.env.AUTH_DEBUG === '1';
 
 const EXPIRES_IN: SignOptions['expiresIn'] = (() => {
   const raw = process.env.JWT_TTL ?? '7d';
-  if (typeof raw === 'number') return raw;            // seconds
-  if (/^\d+$/.test(String(raw))) return Number(raw);  // numeric string => seconds
-  return String(raw) as SignOptions['expiresIn'];     // e.g., "7d", "12h"
+  if (typeof raw === 'number') return raw;
+  if (/^\d+$/.test(String(raw))) return Number(raw);
+  return String(raw) as SignOptions['expiresIn'];
 })();
 
 /* --------------------------- Helpers --------------------------- */
@@ -39,9 +40,8 @@ function signToken(payload: object) {
   return jwt.sign(payload, JWT_SECRET, opts);
 }
 
-/** Send token in URL hash so it never leaves the browser (robust for SPA/CDN). */
+/** Send token in URL hash so it never hits proxies/caches. */
 function bearerRedirect(res: Response, token: string) {
-  // Final URL: https://site.com/auth/callback#token=eyJhbGci...
   res.redirect(`${FRONTEND_ORIGIN}/auth/callback#token=${encodeURIComponent(token)}`);
 }
 
@@ -50,7 +50,6 @@ function failureRedirect(res: Response, code = 'oauth', detail?: string) {
   res.redirect(`${FRONTEND_ORIGIN}/login?err=${encodeURIComponent(code)}${d}`);
 }
 
-// Extract "Bearer <token>" from Authorization header
 function getBearer(req: Request): string | null {
   const h = req.headers['authorization'];
   if (!h) return null;
@@ -79,7 +78,6 @@ router.get(
 );
 
 /* ---------------------- Callback routes ------------------------ */
-// NOTE: explicit `err: unknown` to satisfy noImplicitAny
 function handleCallback(provider: 'google' | 'github') {
   return (req: Request, res: Response, next: NextFunction) => {
     passport.authenticate(
@@ -100,7 +98,6 @@ function handleCallback(provider: 'google' | 'github') {
             return failureRedirect(res, 'unauthorized');
           }
 
-          // Standard JWT subject + claims (Bearer only; no cookies)
           const token = signToken({ sub: user.id, email: user.email, role: user.role ?? 'user' });
           return bearerRedirect(res, token);
         } catch (e: any) {
@@ -116,7 +113,6 @@ router.get('/google/callback', handleCallback('google'));
 router.get('/github/callback', handleCallback('github'));
 
 /* ---------------------- Session helpers ------------------------ */
-// Bearer-based auth: backend logout is a no-op; frontend deletes token
 router.post('/logout', (_req, res) => {
   res.status(204).end();
 });
@@ -127,59 +123,48 @@ router.get('/me', (req, res) => {
     const token = getBearer(req);
     if (!token) return res.status(401).json({ user: null });
 
-    // Allow small clock skew to avoid iat/nbf races right after login
     const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as any;
-
-    // Accept legacy tokens too (uid/id)
     const id = p.sub ?? p.uid ?? p.id;
-    if (id === undefined || id === null) {
-      return res.status(401).json({ user: null });
-    }
+    if (id === undefined || id === null) return res.status(401).json({ user: null });
 
     return res.json({ user: { id, email: p.email ?? null, role: p.role ?? 'user' } });
   } catch (e: any) {
-    if (AUTH_DEBUG) {
-      return res.status(401).json({ user: null, error: e?.name, message: e?.message });
-    }
+    if (AUTH_DEBUG) return res.status(401).json({ user: null, error: e?.name, message: e?.message });
     return res.status(401).json({ user: null });
   }
 });
 
+/* -------- OPTIONAL: simple verifier to debug tokens in browser -------- */
+router.get('/verify-token', (req, res) => {
+  try {
+    // Accept Bearer header OR ?token=...
+    const headerToken = getBearer(req);
+    const queryToken = (req.query.token as string | undefined) || null;
+    const token = headerToken || queryToken;
+    if (!token) return res.status(401).json({ ok: false, error: 'missing_token' });
+
+    const p = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as any;
+    const id = p.sub ?? p.uid ?? p.id;
+    if (id === undefined || id === null) return res.status(401).json({ ok: false, error: 'missing_subject' });
+
+    return res.json({ ok: true, id, email: p.email ?? null, role: p.role ?? 'user', claims: p });
+  } catch (e: any) {
+    return res.status(401).json({ ok: false, name: e?.name, message: e?.message });
+  }
+});
+
+// tiny alias for convenience
+router.get('/whoami', (req, res) => {
+  (router as any).handle({ ...req, url: '/me' }, res, () => {});
+});
+
 /* -------------------------- Debug ------------------------------ */
-// Easy way to confirm the exact callback URLs the backend thinks it has.
 router.get('/debug/callbacks', (_req, res) => {
   res.json({
     google: `${BACKEND_BASE}${API_PREFIX}/auth/google/callback`,
     github: `${BACKEND_BASE}${API_PREFIX}/auth/github/callback`,
     frontend: FRONTEND_ORIGIN,
   });
-});
-
-// Mint a throwaway token and perform the same redirect flow as real OAuth
-router.get('/dev/fake-login', (_req, res) => {
-  const token = signToken({ sub: 'dev-1', email: 'dev@example.com', role: 'admin' });
-  return bearerRedirect(res, token);
-});
-
-// Verify any token (from Authorization header or ?token=) and show decoded claims
-router.get('/verify-token', (req, res) => {
-  const fromHeader = getBearer(req);
-  const fromQuery = (req.query.token as string) || null;
-  const raw = fromHeader || fromQuery;
-  if (!raw) return res.status(401).json({ ok: false, reason: 'missing token' });
-
-  try {
-    const p = jwt.verify(raw, JWT_SECRET, { clockTolerance: 30 }) as any;
-    const id = p.sub ?? p.uid ?? p.id ?? null;
-    return res.json({
-      ok: true,
-      id,
-      email: p.email ?? null,
-      role: p.role ?? 'user',
-    });
-  } catch (e: any) {
-    return res.status(401).json({ ok: false, name: e?.name, message: e?.message });
-  }
 });
 
 export default router;
