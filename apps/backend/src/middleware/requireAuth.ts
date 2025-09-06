@@ -20,29 +20,51 @@ function getBearer(req: Request): string | null {
   return scheme?.toLowerCase() === 'bearer' && token ? token : null;
 }
 
-export default function requireAuth(req: Request & { auth?: any }, res: Response, next: NextFunction) {
+function getToken(req: Request): string | null {
+  // Prefer Authorization header, but allow cookie/query fallback
+  return (
+    getBearer(req) ||
+    (req as any).cookies?.token ||
+    (typeof req.query.token === 'string' ? req.query.token : null)
+  );
+}
+
+export default function requireAuth(
+  req: Request & { auth?: any },
+  res: Response,
+  next: NextFunction
+) {
   if (req.method === 'OPTIONS') return next();
+
   try {
-    const token = getBearer(req);
+    const token = getToken(req);
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
     const payload = jwt.verify(token, JWT_SECRET, { clockTolerance: 30 }) as Claims;
 
-    const userId = payload.sub ?? payload.uid ?? payload.id;
-    if (userId === undefined || userId === null) {
+    const rawId = payload.sub ?? payload.uid ?? payload.id;
+    if (rawId === undefined || rawId === null) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    const num = typeof rawId === 'string' ? Number(rawId) : (rawId as number);
+    const userId = Number.isFinite(num) ? num : rawId;
+
+    // Expose both req.user and req.auth for downstream code
+    (req as any).user = { id: userId as number | string, role: payload.role ?? 'user' };
     req.auth = {
       userId,
       email: payload.email ?? null,
       role: payload.role ?? 'user',
       raw: payload,
     };
+
     next();
   } catch (e: any) {
     if (AUTH_DEBUG) {
-      return res.status(401).json({ error: 'Unauthorized', name: e?.name, message: e?.message });
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', name: e?.name, message: e?.message });
     }
     return res.status(401).json({ error: 'Unauthorized' });
   }

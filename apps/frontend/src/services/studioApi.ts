@@ -1,4 +1,4 @@
-import { api } from './api'; 
+import { api } from './api';
 
 export type StudioModel = {
   name: string;
@@ -27,11 +27,16 @@ export type RowsResp = {
 
 /* ----------------------------- Utils ----------------------------- */
 
+function authHeader() {
+  const t = localStorage.getItem('token');
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 function isProbablyDateString(v: string) {
-  // Accepts things like "08/27/2025, 04:44 PM" or ISO strings
   const d = new Date(v);
   return !isNaN(d.getTime());
 }
+
 function toISO(v: unknown): string | undefined {
   if (v instanceof Date) return isNaN(v.getTime()) ? undefined : v.toISOString();
   if (typeof v === 'string' && v.trim() && isProbablyDateString(v)) {
@@ -56,14 +61,12 @@ function toBoolean(v: unknown): boolean | undefined {
  * - drop empty strings
  * - coerce *At fields (createdAt/updatedAt/etc.) to ISO
  * - coerce common boolean string values
- * (Number coercion is handled server-side; we keep it conservative here.)
  */
 function cleanData(input: Record<string, any>) {
   const out: Record<string, any> = {};
   for (const [key, val] of Object.entries(input ?? {})) {
     if (val === '' || val === undefined || val === null) continue;
 
-    // Dates: any key ending with "At" or Date instances / date-like strings
     if (key.endsWith('At') || val instanceof Date || typeof val === 'string') {
       const iso = toISO(val);
       if (iso) {
@@ -72,7 +75,6 @@ function cleanData(input: Record<string, any>) {
       }
     }
 
-    // Booleans from strings
     const bool = toBoolean(val);
     if (bool !== undefined) {
       out[key] = bool;
@@ -88,7 +90,9 @@ function cleanData(input: Record<string, any>) {
 
 export const studioApi = {
   async getModels() {
-    const r = await api.get<{ models: StudioModel[] }>('/studio/models');
+    const r = await api.get<{ models: StudioModel[] }>('/studio/models', {
+      headers: authHeader(),
+    });
     return r.data.models;
   },
 
@@ -100,24 +104,34 @@ export const studioApi = {
     order?: 'asc' | 'desc';
     q?: string;
   }) {
-    const r = await api.get<RowsResp>('/studio/rows', { params });
+    const r = await api.get<RowsResp>('/studio/rows', {
+      params,
+      headers: authHeader(),
+    });
     return r.data;
   },
 
   async create(model: string, data: Record<string, any>) {
     const payload = { model, data: cleanData(data) };
-    const r = await api.post('/studio/create', payload);
+    const r = await api.post('/studio/create', payload, {
+      headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    });
     return r.data;
   },
 
   async update(model: string, id: any, data: Record<string, any>) {
     const payload = { model, id, data: cleanData(data) };
-    const r = await api.patch('/studio/update', payload);
+    const r = await api.patch('/studio/update', payload, {
+      headers: { ...authHeader(), 'Content-Type': 'application/json' },
+    });
     return r.data;
   },
 
   async destroy(model: string, ids: any[]) {
-    const r = await api.delete('/studio/delete', { data: { model, ids } });
+    const r = await api.delete('/studio/delete', {
+      data: { model, ids },
+      headers: authHeader(),
+    });
     return r.data;
   },
 };
