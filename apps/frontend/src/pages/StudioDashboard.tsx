@@ -1,4 +1,3 @@
-// frontend/src/pages/StudioDashboard.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { studioApi, StudioModel } from '../services/studioApi';
 import { Link, useNavigate } from 'react-router-dom';
@@ -308,9 +307,6 @@ export default function StudioDashboard() {
         <nav className="flex items-center gap-6">
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
-          </Link>
-          <Link className="hover:text-white" to="/admin">
-            Admin
           </Link>
           <button onClick={handleLogout} className="hover:text-white">
             Logout

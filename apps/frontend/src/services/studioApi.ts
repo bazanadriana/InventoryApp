@@ -1,5 +1,4 @@
-// frontend/src/api/services/studioApi.ts
-import { api } from './api'; // you already use this in other components
+import { api } from './api'; 
 
 export type StudioModel = {
   name: string;
