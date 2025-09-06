@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
+/** Read a param from the URL fragment: #token=... */
 function getParamFromHash(name: string): string | null {
   if (!window.location.hash) return null;
   const hp = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -28,14 +29,7 @@ export default function OAuthCallback() {
     if (ran.current) return;
     ran.current = true;
 
-    // Prefer query params, but also support fragment tokens: #token=... / #access_token=...
-    const searchToken =
-      params.get("token") ||
-      params.get("jwt") ||
-      params.get("id_token") ||
-      params.get("access_token") ||
-      params.get("t");
-
+    // Back end now sends #token=..., but keep supporting query params too.
     const hashToken =
       getParamFromHash("token") ||
       getParamFromHash("jwt") ||
@@ -43,7 +37,14 @@ export default function OAuthCallback() {
       getParamFromHash("access_token") ||
       getParamFromHash("t");
 
-    const rawToken = searchToken || hashToken;
+    const searchToken =
+      params.get("token") ||
+      params.get("jwt") ||
+      params.get("id_token") ||
+      params.get("access_token") ||
+      params.get("t");
+
+    const rawToken = hashToken || searchToken;
 
     // If backend sign-in failed, it may send ?err=...
     const err = params.get("err");
@@ -63,6 +64,14 @@ export default function OAuthCallback() {
 
       // Compute safe redirect target
       const safeNext = sanitizeNext(params.get("next") || getParamFromHash("next"));
+
+      // Clean current URL (remove fragment with token) before redirect, without adding history
+      try {
+        const clean = window.location.pathname + window.location.search;
+        window.history.replaceState({}, "", clean);
+      } catch {
+        // no-op
+      }
 
       // Hard replace keeps callback page out of history and avoids guard races.
       // Timeout lets storage/event flush on Safari/iOS before navigation.
