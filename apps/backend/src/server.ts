@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import passport from 'passport';
 import './config/passport';
+
 import debugRoutes from './routes/debugRoutes';
 import searchRoutes from './routes/search.routes';
 import itemsRoutes from './routes/itemsRoutes';
@@ -35,6 +36,7 @@ const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 const NETLIFY_URL = process.env.NETLIFY_URL ? `https://${process.env.NETLIFY_URL}` : undefined;
 
 app.set('trust proxy', 1);
+app.disable('x-powered-by'); // small hardening
 
 /* ----------------------------- CORS ----------------------------- */
 function normalizeOrigin(o?: string | null) {
@@ -92,13 +94,13 @@ const corsOptions: CorsOptions = {
     }
     cb(null, ok);
   },
-  // ✅ We’re not using cookies for auth; rely on Authorization: Bearer
+  // ✅ Bearer-only auth; do not use cookies
   credentials: false,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  // ⬅️ include X-Requested-With and Accept to satisfy preflights in Safari/Chrome
+  // include common headers used by axios/fetch preflights (Safari/Chrome)
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   optionsSuccessStatus: 204,
-  maxAge: 86400, // cache preflight for a day
+  maxAge: 86400,
 };
 
 app.use(cors(corsOptions));
@@ -108,10 +110,10 @@ app.options(/.*/, cors(corsOptions));
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
-app.use(cookieParser());
+app.use(cookieParser()); // harmless; not used for auth
 app.use(passport.initialize());
 
-/* ------------------------ Health & Alias ------------------------ */
+/* ------------------------ Health & Debug ------------------------ */
 app.get('/api/health', (_req, res) => res.send('ok'));
 app.get('/api/debug/cors', (req, res) => {
   res.json({
@@ -123,11 +125,11 @@ app.get('/api/debug/cors', (req, res) => {
   });
 });
 
-// Keep /auth alias → /api/auth to preserve old OAuth links/bookmarks
+// 🔁 Keep legacy /auth links working → forward to /api/auth/*
 app.use('/auth', (req, res) => res.redirect(307, `/api/auth${req.url}`));
 
 /* ---------------------------- Routes ---------------------------- */
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes);                     // includes /api/auth/debug/callbacks
 app.use('/api/inventories', inventoryRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/stats', statsRoutes);
@@ -143,7 +145,7 @@ app.use('/api', customIdRoutes);
 app.use('/api', membersRoutes);
 app.use('/api', commentsRoutes);
 app.use('/api', likesRoutes);
-app.use('/api', debugRoutes);
+app.use('/api', debugRoutes); // if you expose /api/debug/* convenience routes
 
 // Initialize full-text setup (non-blocking)
 initFTS().catch(console.error);

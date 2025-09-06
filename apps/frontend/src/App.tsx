@@ -9,7 +9,13 @@ import { useAuth } from "./hooks/useAuth";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { authReady, isAuthed } = useAuth();
-  if (!authReady) return <div className="p-6 text-center">Loading…</div>;
+  if (!authReady) {
+    return (
+      <div className="p-6 text-center" aria-live="polite" aria-busy="true">
+        Loading…
+      </div>
+    );
+  }
   return isAuthed ? children : <Navigate to="/login" replace />;
 }
 
@@ -22,6 +28,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
           {/* Use Home as login screen; replace with <Login /> if you have one */}
           <Route path="/login" element={<Home />} />
+          <Route path="/signin" element={<Navigate to="/login" replace />} />
+          <Route path="/auth" element={<Navigate to="/login" replace />} />
 
           {/* OAuth callback (support both new and legacy paths) */}
           <Route path="/auth/callback" element={<OAuthCallback />} />
