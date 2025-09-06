@@ -41,7 +41,7 @@ function signToken(payload: object) {
 
 /** Send token in URL hash so it never leaves the browser (robust for SPA/CDN). */
 function bearerRedirect(res: Response, token: string) {
-  // Example final URL: https://site.com/auth/callback#token=eyJhbGci...
+  // Final URL: https://site.com/auth/callback#token=eyJhbGci...
   res.redirect(`${FRONTEND_ORIGIN}/auth/callback#token=${encodeURIComponent(token)}`);
 }
 
@@ -146,12 +146,40 @@ router.get('/me', (req, res) => {
 });
 
 /* -------------------------- Debug ------------------------------ */
+// Easy way to confirm the exact callback URLs the backend thinks it has.
 router.get('/debug/callbacks', (_req, res) => {
   res.json({
     google: `${BACKEND_BASE}${API_PREFIX}/auth/google/callback`,
     github: `${BACKEND_BASE}${API_PREFIX}/auth/github/callback`,
     frontend: FRONTEND_ORIGIN,
   });
+});
+
+// Mint a throwaway token and perform the same redirect flow as real OAuth
+router.get('/dev/fake-login', (_req, res) => {
+  const token = signToken({ sub: 'dev-1', email: 'dev@example.com', role: 'admin' });
+  return bearerRedirect(res, token);
+});
+
+// Verify any token (from Authorization header or ?token=) and show decoded claims
+router.get('/verify-token', (req, res) => {
+  const fromHeader = getBearer(req);
+  const fromQuery = (req.query.token as string) || null;
+  const raw = fromHeader || fromQuery;
+  if (!raw) return res.status(401).json({ ok: false, reason: 'missing token' });
+
+  try {
+    const p = jwt.verify(raw, JWT_SECRET, { clockTolerance: 30 }) as any;
+    const id = p.sub ?? p.uid ?? p.id ?? null;
+    return res.json({
+      ok: true,
+      id,
+      email: p.email ?? null,
+      role: p.role ?? 'user',
+    });
+  } catch (e: any) {
+    return res.status(401).json({ ok: false, name: e?.name, message: e?.message });
+  }
 });
 
 export default router;
