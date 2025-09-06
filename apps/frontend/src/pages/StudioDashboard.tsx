@@ -1,12 +1,12 @@
+// frontend/src/pages/StudioDashboard.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { studioApi, StudioModel } from '../services/studioApi';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../hooks/useAuth';
-import { studioApi } from '../services/studioApi';
-import type { StudioModel, RowsResp } from '../services/studioApi';
 
-type Col = RowsResp['columns'][number];
+type Col = { key: string; type: string; isId?: boolean; readOnly?: boolean };
 
 export default function StudioDashboard() {
   const [models, setModels] = useState<StudioModel[]>([]);
@@ -35,52 +35,25 @@ export default function StudioDashboard() {
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const fieldsRef = useRef<HTMLDivElement>(null);
 
-  // Auth + router
+  // Logout (avoid /logout 404 + double click)
   const { logout } = useAuth();
   const navigate = useNavigate();
-
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
   };
 
-  /** Centralized auth-error handler (401/403) */
-  const handleAuthError = (err: any) => {
-    const status = err?.response?.status;
-    if (status === 401 || status === 403) {
-      logout();
-      navigate('/', { replace: true });
-      return true;
-    }
-    return false;
-  };
-
-  const extractError = (err: any) =>
-    err?.response?.data?.error ||
-    err?.response?.data?.message ||
-    err?.message ||
-    'Request failed';
-
   const activeModel = useMemo(
     () => models.find((m) => m.name === active) || null,
     [models, active]
   );
-  const idKey = useMemo(() => activeModel?.idField ?? 'id', [activeModel]);
 
   useEffect(() => {
     (async () => {
-      try {
-        const ms = await studioApi.getModels();
-        setModels(ms);
-        if (!active && ms.length) setActive(ms[0].name);
-      } catch (err) {
-        if (!handleAuthError(err)) {
-          console.error('Models load error:', err);
-          alert(extractError(err));
-        }
-      }
+      const ms = await studioApi.getModels();
+      setModels(ms);
+      if (!active && ms.length) setActive(ms[0].name);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -106,6 +79,15 @@ export default function StudioDashboard() {
     };
   }, []);
 
+  function extractError(err: any) {
+    return (
+      err?.response?.data?.error ||
+      err?.response?.data?.message ||
+      err?.message ||
+      'Request failed'
+    );
+  }
+
   async function load(customQ?: string) {
     if (!active) return;
     setLoading(true);
@@ -124,10 +106,8 @@ export default function StudioDashboard() {
       setTotal(resp.total);
       setSelectedIds([]);
     } catch (err) {
-      if (!handleAuthError(err)) {
-        console.error('Load error:', err);
-        alert(extractError(err));
-      }
+      console.error('Load error:', err);
+      alert(extractError(err));
     } finally {
       setLoading(false);
     }
@@ -140,24 +120,24 @@ export default function StudioDashboard() {
   }
 
   function toggleAllSelected(checked: boolean) {
-    setSelectedIds(checked ? rows.map((r) => r[idKey]) : []);
+    if (!activeModel?.idField) return;
+    setSelectedIds(checked ? rows.map((r) => r[activeModel.idField!]) : []);
   }
 
   function toggleRowSelected(row: any) {
-    const id = row[idKey];
+    if (!activeModel?.idField) return;
+    const id = row[activeModel.idField];
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function handleDeleteSelected() {
-    if (selectedIds.length === 0) return;
+    if (!activeModel?.idField || selectedIds.length === 0) return;
     try {
       await studioApi.destroy(active, selectedIds);
       await load();
     } catch (err) {
-      if (!handleAuthError(err)) {
-        console.error('Delete failed:', err);
-        alert(extractError(err));
-      }
+      console.error('Delete failed:', err);
+      alert(extractError(err));
     }
   }
 
@@ -229,23 +209,26 @@ export default function StudioDashboard() {
     }
   }
 
+  /** ----------------------------------------------------------------
+   * FIX: define `commitInline` in this file so TS can find it
+   * ----------------------------------------------------------------*/
   const commitInline = async (row: any, key: string, value: any) => {
-    const id = row[idKey];
+    if (!activeModel?.idField) return;
+    const id = row[activeModel.idField];
     const prevValue = row[key];
 
     // optimistic update
     setRows((prev) =>
-      prev.map((r) => (r[idKey] === id ? { ...r, [key]: value } : r))
+      prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: value } : r))
     );
 
     try {
       await studioApi.update(active, id, { [key]: value });
     } catch (err) {
-      if (handleAuthError(err)) return;
       console.error('Update failed:', err);
       // revert on error
       setRows((prev) =>
-        prev.map((r) => (r[idKey] === id ? { ...r, [key]: prevValue } : r))
+        prev.map((r) => (r[activeModel.idField!] === id ? { ...r, [key]: prevValue } : r))
       );
       alert(extractError(err));
     }
@@ -311,10 +294,8 @@ export default function StudioDashboard() {
       setAdding(false);
       await load();
     } catch (err) {
-      if (!handleAuthError(err)) {
-        console.error('Create failed:', err);
-        setModalError(extractError(err));
-      }
+      console.error('Create failed:', err);
+      setModalError(extractError(err));
     } finally {
       setSaving(false);
     }
@@ -322,12 +303,14 @@ export default function StudioDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Studio-only header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="text-2xl font-semibold">InventoryApp</div>
         <nav className="flex items-center gap-6">
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
+          </Link>
+          <Link className="hover:text-white" to="/admin">
+            Admin
           </Link>
           <button onClick={handleLogout} className="hover:text-white">
             Logout
@@ -460,9 +443,7 @@ export default function StudioDashboard() {
                       <input
                         type="checkbox"
                         checked={
-                          rows.length > 0 &&
-                          selectedIds.length > 0 &&
-                          selectedIds.length === rows.length
+                          selectedIds.length > 0 && selectedIds.length === rows.length
                         }
                         onChange={(e) => toggleAllSelected(e.target.checked)}
                       />
@@ -510,13 +491,20 @@ export default function StudioDashboard() {
                   {!loading &&
                     rows.map((r) => (
                       <tr
-                        key={r[idKey] ?? JSON.stringify(r)}
+                        key={
+                          activeModel?.idField
+                            ? r[activeModel.idField]
+                            : JSON.stringify(r)
+                        }
                         className="odd:bg-slate-900/40 even:bg-slate-900/20"
                       >
                         <td className="px-3 py-2">
                           <input
                             type="checkbox"
-                            checked={selectedIds.includes(r[idKey])}
+                            checked={
+                              !!activeModel?.idField &&
+                              selectedIds.includes(r[activeModel.idField!])
+                            }
                             onChange={() => toggleRowSelected(r)}
                           />
                         </td>

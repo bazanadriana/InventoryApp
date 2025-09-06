@@ -1,6 +1,6 @@
-import http from './http';
+// frontend/src/api/services/studioApi.ts
+import { api } from './api'; // you already use this in other components
 
-/* ============================ Types ============================ */
 export type StudioModel = {
   name: string;
   delegate: string;
@@ -14,7 +14,6 @@ export type StudioModel = {
     isRequired?: boolean;
     isList?: boolean;
     isReadOnly?: boolean;
-    relationFromFields?: string[];
   }[];
 };
 
@@ -27,12 +26,13 @@ export type RowsResp = {
   columns: { key: string; type: string; isId?: boolean; readOnly?: boolean }[];
 };
 
-/* ============================ Utils ============================ */
+/* ----------------------------- Utils ----------------------------- */
+
 function isProbablyDateString(v: string) {
+  // Accepts things like "08/27/2025, 04:44 PM" or ISO strings
   const d = new Date(v);
   return !isNaN(d.getTime());
 }
-
 function toISO(v: unknown): string | undefined {
   if (v instanceof Date) return isNaN(v.getTime()) ? undefined : v.toISOString();
   if (typeof v === 'string' && v.trim() && isProbablyDateString(v)) {
@@ -54,15 +54,17 @@ function toBoolean(v: unknown): boolean | undefined {
 
 /**
  * Clean payload before sending to Studio API:
- * - drop empty strings/null/undefined
+ * - drop empty strings
  * - coerce *At fields (createdAt/updatedAt/etc.) to ISO
  * - coerce common boolean string values
+ * (Number coercion is handled server-side; we keep it conservative here.)
  */
 function cleanData(input: Record<string, any>) {
   const out: Record<string, any> = {};
   for (const [key, val] of Object.entries(input ?? {})) {
     if (val === '' || val === undefined || val === null) continue;
 
+    // Dates: any key ending with "At" or Date instances / date-like strings
     if (key.endsWith('At') || val instanceof Date || typeof val === 'string') {
       const iso = toISO(val);
       if (iso) {
@@ -71,6 +73,7 @@ function cleanData(input: Record<string, any>) {
       }
     }
 
+    // Booleans from strings
     const bool = toBoolean(val);
     if (bool !== undefined) {
       out[key] = bool;
@@ -82,11 +85,11 @@ function cleanData(input: Record<string, any>) {
   return out;
 }
 
-/* ============================= API ============================= */
-/** NOTE: our shared axios client `http` already has baseURL `/api` and attaches Authorization. */
+/* ------------------------------ API ------------------------------ */
+
 export const studioApi = {
   async getModels() {
-    const r = await http.get<{ models: StudioModel[] }>('/studio/models');
+    const r = await api.get<{ models: StudioModel[] }>('/studio/models');
     return r.data.models;
   },
 
@@ -98,35 +101,24 @@ export const studioApi = {
     order?: 'asc' | 'desc';
     q?: string;
   }) {
-    const cleanParams = {
-      ...params,
-      q: params.q?.trim() || undefined,
-    };
-    const r = await http.get<RowsResp>('/studio/rows', { params: cleanParams });
+    const r = await api.get<RowsResp>('/studio/rows', { params });
     return r.data;
   },
 
-  /** POST /api/studio/rows/:model  (body = data) */
   async create(model: string, data: Record<string, any>) {
-    const r = await http.post(`/studio/rows/${encodeURIComponent(model)}`, cleanData(data));
-    return r.data;
-    },
-
-  /** PATCH /api/studio/rows/:model/:id  (body = partial fields) */
-  async update(model: string, id: any, data: Record<string, any>) {
-    const r = await http.patch(
-      `/studio/rows/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
-      cleanData(data)
-    );
+    const payload = { model, data: cleanData(data) };
+    const r = await api.post('/studio/create', payload);
     return r.data;
   },
 
-  /** POST /api/studio/rows/:model/bulk-delete  (body = { ids: [...] }) */
+  async update(model: string, id: any, data: Record<string, any>) {
+    const payload = { model, id, data: cleanData(data) };
+    const r = await api.patch('/studio/update', payload);
+    return r.data;
+  },
+
   async destroy(model: string, ids: any[]) {
-    const r = await http.post(
-      `/studio/rows/${encodeURIComponent(model)}/bulk-delete`,
-      { ids }
-    );
+    const r = await api.delete('/studio/delete', { data: { model, ids } });
     return r.data;
   },
 };
