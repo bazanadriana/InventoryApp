@@ -113,7 +113,7 @@ model Item {
   version     Int      @default(1)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  new         Boolean  @default(false)   // <-- Added: flag for brand-new items
+  new         Boolean  @default(false)   
 
   inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ItemCreatedBy", fields: [createdById], references: [id])
