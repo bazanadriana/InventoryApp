@@ -152,6 +152,26 @@ function buildSyntheticConnects(
   return out;
 }
 
+/** Promote scalar FKs to object connects (helps when any other relation uses object connect on create) */
+function promoteScalarFksToConnect(model: ModelMeta, payload: Record<string, any>) {
+  for (const f of model.fields) {
+    if (f.kind !== 'object' || f.isList) continue;
+    const fk = f.relationFromFields?.[0];
+    if (!fk) continue;
+
+    const hasObjectConnect = payload[f.name]?.connect?.id != null;
+    const hasScalarFk = payload[fk] != null;
+
+    if (!hasObjectConnect && hasScalarFk) {
+      const idNum = Number(payload[fk]);
+      if (!Number.isNaN(idNum)) {
+        payload[f.name] = { connect: { id: idNum } };
+        delete payload[fk]; // avoid conflicting inputs
+      }
+    }
+  }
+}
+
 /** If an object-connect is present for a relation with a scalar FK, drop the FK to avoid conflicts */
 function dropScalarFkWhenObjectConnect(model: ModelMeta, payload: Record<string, any>) {
   for (const f of model.fields) {
@@ -341,6 +361,9 @@ router.post('/create', async (req: any, res) => {
 
     const data: Record<string, any> = { ...scalar, ...patchRelations, ...syntheticConnect };
 
+    // NEW: promote any scalar FKs to object connects (required when any other relation uses object connect)
+    promoteScalarFksToConnect(model, data);
+
     dropScalarFkWhenObjectConnect(model, data);
     ensureRequiredRelations(model, data);
     await validateRelatedExistence(model, data);
@@ -369,6 +392,9 @@ router.patch('/update', async (req, res) => {
     const syntheticConnect = buildSyntheticConnects(model, rawData || {}, false, req);
 
     const data = { ...scalar, ...patchRelations, ...syntheticConnect };
+
+    // Optional: also promote on update for consistency
+    promoteScalarFksToConnect(model, data);
 
     dropScalarFkWhenObjectConnect(model, data);
     await validateRelatedExistence(model, data);
