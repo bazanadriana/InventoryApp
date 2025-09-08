@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 
 type Col = { key: string; type: string; isId?: boolean; readOnly?: boolean };
 
-const HIDDEN_FIELDS = new Set<string>(['new']); 
+const HIDDEN_FIELDS = new Set<string>(['new']); // ← removes the "New" checkbox/field
 
 export default function StudioDashboard() {
   const [models, setModels] = useState<StudioModel[]>([]);
