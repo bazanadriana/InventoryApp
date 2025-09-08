@@ -7,6 +7,8 @@ import { useAuth } from '../hooks/useAuth';
 
 type Col = { key: string; type: string; isId?: boolean; readOnly?: boolean };
 
+const HIDDEN_FIELDS = new Set<string>(['new']); 
+
 export default function StudioDashboard() {
   const [models, setModels] = useState<StudioModel[]>([]);
   const [active, setActive] = useState<string>('');
@@ -99,9 +101,20 @@ export default function StudioDashboard() {
         order,
         q: typeof customQ === 'string' ? customQ : q,
       });
+
+      // Filter out hidden fields from the column list
+      const filteredCols = resp.columns.filter((c: Col) => !HIDDEN_FIELDS.has(c.key));
+
       setRows(resp.rows);
-      setCols(resp.columns);
-      setSelectedCols((prev) => (prev.length ? prev : resp.columns.map((c) => c.key)));
+      setCols(filteredCols);
+
+      // Initialize selected columns without hidden ones
+      setSelectedCols((prev) =>
+        prev.length
+          ? prev.filter((k) => !HIDDEN_FIELDS.has(k))
+          : filteredCols.map((c: Col) => c.key)
+      );
+
       setTotal(resp.total);
       setSelectedIds([]);
     } catch (err) {
@@ -115,6 +128,7 @@ export default function StudioDashboard() {
   const visibleCols = cols.filter((c) => selectedCols.includes(c.key));
 
   function toggleCol(k: string) {
+    if (HIDDEN_FIELDS.has(k)) return; // safety
     setSelectedCols((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   }
 
@@ -208,11 +222,10 @@ export default function StudioDashboard() {
     }
   }
 
-  /** ----------------------------------------------------------------
-   * FIX: define `commitInline` in this file so TS can find it
-   * ----------------------------------------------------------------*/
+  /** commitInline for grid edits */
   const commitInline = async (row: any, key: string, value: any) => {
     if (!activeModel?.idField) return;
+    if (HIDDEN_FIELDS.has(key)) return; // never send hidden fields
     const id = row[activeModel.idField];
     const prevValue = row[key];
 
@@ -251,7 +264,7 @@ export default function StudioDashboard() {
     if (!activeModel) return;
     const blank: Record<string, any> = {};
     cols.forEach((c) => {
-      if (c.isId || c.readOnly) return;
+      if (c.isId || c.readOnly || HIDDEN_FIELDS.has(c.key)) return; // skip hidden fields
       blank[c.key] = null;
     });
     // add synthetic relation ids if needed
@@ -269,6 +282,10 @@ export default function StudioDashboard() {
   // Turn any synthetic `<relation>Id` into nested `{ relation: { connect: { id } } }`
   function withRelationConnects(payload: Record<string, any>) {
     const out: Record<string, any> = { ...payload };
+    // strip hidden fields if they somehow slipped in
+    for (const k of Object.keys(out)) {
+      if (HIDDEN_FIELDS.has(k)) delete out[k];
+    }
     requiredSingleRelations.forEach((rel: any) => {
       if (relationHasScalarFK(rel.name, rel.relationFromFields)) return; // scalar FK exists; keep as-is
       const key = `${rel.name}Id`; // e.g., itemId
@@ -586,9 +603,9 @@ export default function StudioDashboard() {
             )}
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Scalars */}
+              {/* Scalars (hidden fields excluded) */}
               {cols
-                .filter((c) => !c.isId && !c.readOnly)
+                .filter((c) => !c.isId && !c.readOnly && !HIDDEN_FIELDS.has(c.key))
                 .map((c) => (
                   <label key={c.key} className="text-sm">
                     <div className="mb-1 opacity-80">{headerLabel(c.key)}</div>
