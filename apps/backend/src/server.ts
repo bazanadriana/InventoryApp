@@ -23,6 +23,7 @@ import statsRoutes from './routes/statsRoutes.js';
 
 import studioRoutes from './routes/studioRoutes.js';
 import requireAuth from './middleware/requireAuth.js';
+import salesforceRoutes from './routes/salesforceRoutes.js'; // <-- add .js extension for consistency
 
 const app = express();
 
@@ -31,7 +32,9 @@ const API_PREFIX = process.env.API_PREFIX || '/api';
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
 const FRONTEND_ORIGIN = (process.env.FRONTEND_ORIGIN || '').replace(/\/+$/, '');
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL?.replace(/\/+$/, '');
-const NETLIFY_URL = process.env.NETLIFY_URL ? `https://${process.env.NETLIFY_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '')}` : undefined;
+const NETLIFY_URL = process.env.NETLIFY_URL
+  ? `https://${process.env.NETLIFY_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`
+  : undefined;
 
 app.set('trust proxy', 1);
 
@@ -47,27 +50,23 @@ if (NETLIFY_URL) allowlist.add(NETLIFY_URL);
 
 const corsOptions: cors.CorsOptions = {
   origin(origin, cb) {
-    // Allow same-origin / curl / server-to-server (no Origin header)
-    if (!origin) return cb(null, true);
+    if (!origin) return cb(null, true);                 // same-origin / server-to-server
     if (allowlist.has(origin)) return cb(null, true);
     return cb(new Error(`CORS: origin not allowed -> ${origin}`));
   },
-  credentials: false, // using Authorization header, not cookies
+  credentials: false,                                   // using Authorization header
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   optionsSuccessStatus: 204,
   maxAge: 86400,
 };
 
-// Vary so proxies don't cache a CORS response across origins
 app.use((_req, res, next) => {
-  res.header('Vary', 'Origin');
+  res.header('Vary', 'Origin'); // ensure proxies don’t cache across origins
   next();
 });
 
-// CORS must be before any routes
 app.use(cors(corsOptions));
-// Express 5: use a RegExp for global OPTIONS preflights
 app.options(/.*/, cors(corsOptions));
 
 /* -------------------------- Middleware -------------------------- */
@@ -94,7 +93,10 @@ app.use(`${API_PREFIX}/stats`, statsRoutes);
 // Protected Studio endpoints
 app.use(`${API_PREFIX}/studio`, requireAuth, studioRoutes);
 
-// Unprotected utilities
+// 🔐 Salesforce integration (protected)
+app.use(`${API_PREFIX}/integrations/salesforce`, requireAuth, salesforceRoutes);
+
+/* ----------------------- Search & Utilities --------------------- */
 initFTS().catch(console.error);
 app.use(API_PREFIX, searchRoutes);
 app.use(API_PREFIX, itemsRoutes);
@@ -112,6 +114,10 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 /* ----------------------------- Start ---------------------------- */
+process.on('unhandledRejection', (e) => {
+  console.error('[unhandledRejection]', e);
+});
+
 app.listen(PORT, () => {
   console.log(`API listening on :${PORT}`);
   console.log(`CORS allowlist: ${[...allowlist].join(', ')}`);

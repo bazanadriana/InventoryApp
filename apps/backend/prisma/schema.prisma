@@ -1,33 +1,3 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-//////////////////////////////////////////////////////////
-// Enums
-//////////////////////////////////////////////////////////
-
-enum InventoryRole {
-  EDITOR
-  VIEWER
-}
-
-enum FieldKind {
-  TEXT       // single-line string
-  NUMBER     // numeric
-  MULTILINE  // multi-line text
-  LINK       // url or document link
-  BOOLEAN    // true/false
-}
-
-//////////////////////////////////////////////////////////
-// Models
-//////////////////////////////////////////////////////////
-
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
@@ -35,6 +5,13 @@ model User {
   image     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // ✨ Salesforce linkage (optional, nullable)
+  salesforceAccountId  String?  @db.VarChar(18)
+  salesforceContactId  String?  @db.VarChar(18)
+
+  @@index([salesforceAccountId])
+  @@index([salesforceContactId])
 
   // relations
   owned        Inventory[]       @relation("UserOwnsInventories")
@@ -49,7 +26,7 @@ model Inventory {
   ownerId      Int
   title        String
   description  String?  @db.Text
-  category     String   @default("general") // ensure not-null with a sane default
+  category     String   @default("general")
   imageUrl     String?
   isPublic     Boolean  @default(false)
   version      Int      @default(1)
@@ -57,7 +34,6 @@ model Inventory {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // relations
   owner        User              @relation("UserOwnsInventories", fields: [ownerId], references: [id])
   items        Item[]
   customFields CustomField[]
@@ -81,6 +57,7 @@ model InventoryMember {
 
   @@unique([inventoryId, userId])
   @@index([userId])
+  @@index([inventoryId]) // 🔎 quick lookups of members by inventory
 }
 
 model Tag {
@@ -93,7 +70,6 @@ model Tag {
 }
 
 model InventoryTag {
-  // link table Inventory <-> Tag
   inventoryId Int
   tagId       Int
   createdAt   DateTime @default(now())
@@ -113,7 +89,7 @@ model Item {
   version     Int      @default(1)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  new         Boolean  @default(false)   
+  new         Boolean  @default(false)
 
   inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ItemCreatedBy", fields: [createdById], references: [id])
@@ -122,7 +98,6 @@ model Item {
   comments Comment[]
   likes    Like[]
 
-  // custom IDs unique within a single inventory
   @@unique([inventoryId, customId])
   @@index([inventoryId])
   @@index([createdById])
@@ -144,7 +119,7 @@ model CustomField {
   values    ItemValue[]
 
   @@index([inventoryId])
-  @@unique([inventoryId, name]) // avoid duplicate field names per inventory
+  @@unique([inventoryId, name])
 }
 
 model ItemValue {
@@ -156,7 +131,7 @@ model ItemValue {
   valueText   String?  @db.Text
   valueNumber Float?
   valueBool   Boolean?
-  valueLink   String?
+  valueLink   String?  @db.VarChar(2048) // 🔧 preferable for URLs
 
   createdAt DateTime @default(now())
 
@@ -165,6 +140,7 @@ model ItemValue {
 
   @@id([itemId, fieldId])
   @@index([fieldId])
+  @@index([itemId]) // 🔎 common join path: values by item
 }
 
 model Comment {

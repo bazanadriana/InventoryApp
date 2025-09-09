@@ -5,22 +5,20 @@
   "description": "Inventory App backend",
   "type": "commonjs",
   "main": "dist/server.js",
-  "engines": { "node": ">=20.10" },
+  "engines": {
+    "node": ">=20.10"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
     "migrate:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
-
     "start": "prisma migrate deploy && node dist/server.js",
     "start:prod": "prisma migrate deploy && node dist/server.js",
     "start:nomigrate": "node dist/server.js",
-
     "postinstall": "prisma generate || echo \"skip prisma\"",
     "db:seed": "prisma db seed"
   },
@@ -29,19 +27,20 @@
   },
   "dependencies": {
     "@prisma/client": "6.15.0",
-    "prisma": "6.15.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "express-session": "^1.18.2",
     "helmet": "^8.1.0",
+    "jsforce": "^3.10.7",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.16.3",
+    "prisma": "6.15.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
