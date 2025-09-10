@@ -7,6 +7,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/*****************
+ * Enums
+ *****************/
+enum InventoryRole {
+  EDITOR
+  VIEWER
+}
+
+enum FieldKind {
+  TEXT
+  NUMBER
+  MULTILINE
+  LINK
+  BOOLEAN
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
