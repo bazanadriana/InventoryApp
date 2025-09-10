@@ -10,17 +10,18 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio",
-    "migrate:deploy": "prisma migrate deploy",
-    "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push",
+    "prisma:generate": "prisma generate --schema=./prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema=./prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema=./prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
+    "db:push": "prisma db push --schema=./prisma/schema.prisma",
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
-    "start": "prisma migrate deploy && node dist/server.js",
-    "start:prod": "prisma migrate deploy && node dist/server.js",
+    "start": "npm run migrate:deploy && node dist/server.js",
+    "start:prod": "npm run migrate:deploy && node dist/server.js",
     "start:nomigrate": "node dist/server.js",
-    "postinstall": "prisma generate || echo \"skip prisma\"",
-    "db:seed": "prisma db seed"
+    "postinstall": "prisma generate --schema=./prisma/schema.prisma || echo \"skip prisma\"",
+    "db:seed": "prisma db seed --schema=./prisma/schema.prisma",
+    "print:schema": "echo '--- prisma/schema.prisma ---' && sed -n '1,80p' prisma/schema.prisma"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
