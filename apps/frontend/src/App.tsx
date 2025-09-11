@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import Header from "./components/layout/Header";           
 import Footer from "./components/layout/Footer";
 import Home from "./pages/Home";
 import NotFound from "./routes/NotFound";
@@ -10,62 +11,33 @@ import { useAuth } from "./hooks/useAuth";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { authReady, isAuthed } = useAuth();
-  if (!authReady) {
-    return (
-      <div className="p-6 text-center" aria-live="polite" aria-busy="true">
-        Loading…
-      </div>
-    );
-  }
+  if (!authReady) return <div className="p-6 text-center">Loading…</div>;
   return isAuthed ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
   return (
     <div className="min-h-screen">
+      <Header />                                           {/* ⬅️ global top bar */}
       <main className="mx-auto max-w-6xl px-4 py-8">
         <Routes>
           {/* Public */}
           <Route path="/" element={<Home />} />
-          {/* Use Home as login screen; replace with <Login /> if you have one */}
           <Route path="/login" element={<Home />} />
           <Route path="/signin" element={<Navigate to="/login" replace />} />
           <Route path="/auth" element={<Navigate to="/login" replace />} />
-
-          {/* OAuth callback (support both new and legacy paths) */}
           <Route path="/auth/callback" element={<OAuthCallback />} />
           <Route path="/oauth/callback" element={<Navigate to="/auth/callback" replace />} />
-
-          {/* Logout helper */}
           <Route path="/logout" element={<Logout />} />
 
-          {/* Protected app */}
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuth>
-                <StudioDashboard />
-              </RequireAuth>
-            }
-          />
+          {/* Protected */}
+          <Route path="/dashboard" element={<RequireAuth><StudioDashboard /></RequireAuth>} />
+          <Route path="/profile"   element={<RequireAuth><Profile /></RequireAuth>} />
+          <Route path="/me"        element={<Navigate to="/profile" replace />} />
+          <Route path="/account"   element={<Navigate to="/profile" replace />} />
 
-          {/* NEW: User Profile (protected) */}
-          <Route
-            path="/profile"
-            element={
-              <RequireAuth>
-                <Profile />
-              </RequireAuth>
-            }
-          />
-          {/* Helpful aliases */}
-          <Route path="/me" element={<Navigate to="/profile" replace />} />
-          <Route path="/account" element={<Navigate to="/profile" replace />} />
-
-          {/* Alias */}
+          {/* Alias & 404 */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />
-
-          {/* 404 */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
