@@ -1,24 +1,34 @@
-import { Link } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../../hooks/useAuth";
 
 export default function TopNav() {
-  const { isAuthed } = useAuth();
+  const { authReady, isAuthed, logout } = useAuth();
+  const navigate = useNavigate();
+
+  if (!authReady) return null;
+
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    // active = permanent white; inactive = grey, white on hover
+    (isActive ? "text-white" : "text-slate-400 hover:text-white");
+
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-      <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link to="/" className="font-semibold tracking-tight text-slate-900 dark:text-white">
-          InventoryApp
-        </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to="/" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Home</Link>
-          {isAuthed && (
-            <>
-              <Link to="/dashboard" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Dashboard</Link>
-              <Link to="/admin" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Admin</Link>
-            </>
-          )}
-        </div>
-      </nav>
+    <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+      <Link to={isAuthed ? "/dashboard" : "/"} className="text-2xl font-semibold">
+        InventoryApp
+      </Link>
+
+      {isAuthed && (
+        <nav className="flex items-center gap-6">
+          <NavLink to="/dashboard" end className={linkClass}>Dashboard</NavLink>
+          <NavLink to="/profile" className={linkClass}>Profile</NavLink>
+          <button
+            onClick={() => { logout(); navigate("/", { replace: true }); }}
+            className="text-slate-400 hover:text-white"
+          >
+            Logout
+          </button>
+        </nav>
+      )}
     </header>
   );
 }
