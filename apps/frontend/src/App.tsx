@@ -5,6 +5,7 @@ import NotFound from "./routes/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import Logout from "./pages/Logout";
 import StudioDashboard from "./pages/StudioDashboard";
+import Profile from "./pages/Profile";
 import { useAuth } from "./hooks/useAuth";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -47,6 +48,19 @@ export default function App() {
               </RequireAuth>
             }
           />
+
+          {/* NEW: User Profile (protected) */}
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <Profile />
+              </RequireAuth>
+            }
+          />
+          {/* Helpful aliases */}
+          <Route path="/me" element={<Navigate to="/profile" replace />} />
+          <Route path="/account" element={<Navigate to="/profile" replace />} />
 
           {/* Alias */}
           <Route path="/admin" element={<Navigate to="/dashboard" replace />} />

@@ -308,6 +308,12 @@ export default function StudioDashboard() {
           <Link className="hover:text-white" to="/dashboard">
             Dashboard
           </Link>
+
+          {/* NEW: Profile link next to Dashboard and Logout */}
+          <Link className="hover:text-white" to="/profile">
+            Profile
+          </Link>
+
           <button onClick={handleLogout} className="hover:text-white">
             Logout
           </button>
