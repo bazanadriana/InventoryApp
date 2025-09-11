@@ -1,16 +1,25 @@
-import SalesforceForm from '../components/profile/SalesforceForm';
-// ... your existing imports
+// apps/frontend/src/pages/Profile.tsx
+import { useState } from "react";
+import SalesforceForm from "../components/profile/SalesforceForm";
 
 export default function Profile() {
-  // load current user, etc.
+  const [sfIds, setSfIds] =
+    useState<{ accountId: string; contactId: string } | null>(null);
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* your current profile UI */}
+    <div className="mx-auto max-w-3xl p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">Profile</h1>
+
+      {sfIds && (
+        <div className="rounded-xl border border-emerald-700/40 bg-emerald-600/10 p-4 text-sm">
+          <div className="font-medium mb-1">Salesforce IDs</div>
+          <div>Account Id: <code>{sfIds.accountId}</code></div>
+          <div>Contact Id: <code>{sfIds.contactId}</code></div>
+        </div>
+      )}
 
       <div className="border-t pt-6">
-        <SalesforceForm onSuccess={(ids) => {
-          console.log('SF IDs:', ids);
-        }} />
+        <SalesforceForm onSuccess={setSfIds} />
       </div>
     </div>
   );
