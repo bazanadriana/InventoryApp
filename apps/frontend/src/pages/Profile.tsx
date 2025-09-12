@@ -19,11 +19,14 @@ type Inventory = {
   ownerId: number;
 };
 
-/** API base – set VITE_API_URL on Netlify to your Render API, e.g.
- *  https://<your-render-app>.onrender.com/api
- */
-const API_BASE =
-  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") || "/api";
+// --- Resolve API base: ensure it ends with /api (fallback to /api for local proxies)
+function resolveApiBase() {
+  const raw = (import.meta.env.VITE_API_URL as string | undefined) || "";
+  if (!raw) return "/api";
+  const trimmed = raw.replace(/\/+$/, "");
+  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+}
+const API_BASE = resolveApiBase();
 
 async function getJsonOrText(res: Response) {
   const ct = res.headers.get("content-type") || "";
@@ -31,7 +34,7 @@ async function getJsonOrText(res: Response) {
   const body = isJson ? await res.json() : await res.text();
   if (!res.ok) {
     const msg = isJson
-      ? body?.error || body?.message || JSON.stringify(body)
+      ? (body as any)?.error || (body as any)?.message || JSON.stringify(body)
       : (body as string)?.slice(0, 200) || `HTTP ${res.status}`;
     throw new Error(msg);
   }
@@ -46,7 +49,6 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Last Salesforce sync (from the form)
   const [lastSync, setLastSync] = useState<{
     accountId: string;
     contactId: string;
@@ -60,16 +62,16 @@ export default function Profile() {
       setLoading(true);
       setError(null);
       try {
-        // ---- 1) current user (accept `{...}` or `{ user: {...} }`)
-        const userResp = await fetch(`${API_BASE}/users/me`, {
+        // 1) me
+        const meResp = await fetch(`${API_BASE}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const raw = await getJsonOrText(userResp);
+        const raw = await getJsonOrText(meResp);
         const user: Me =
           raw && typeof raw === "object" && "user" in raw ? (raw as any).user : (raw as Me);
         if (mounted) setMe(user);
 
-        // ---- 2) inventories (list via studio endpoint, filter by ownerId)
+        // 2) inventories owned by me
         const rowsResp = await fetch(
           `${API_BASE}/studio/rows?model=Inventory&perPage=100&sort=createdAt&order=desc`,
           { headers: { Authorization: `Bearer ${token}` } }
@@ -79,7 +81,6 @@ export default function Profile() {
         if (mounted) setInventories(mine);
       } catch (e: any) {
         if (mounted) setError(e?.message || "Failed to load profile");
-        // still allow page render with empty panels
       } finally {
         if (mounted) setLoading(false);
       }
@@ -196,7 +197,6 @@ export default function Profile() {
             <SalesforceForm
               onSuccess={(data) => {
                 setLastSync(data);
-                // Optimistically reflect SF IDs in the summary
                 setMe((prev) =>
                   prev
                     ? {
