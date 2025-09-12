@@ -19,6 +19,25 @@ type Inventory = {
   ownerId: number;
 };
 
+/** API base – set VITE_API_URL on Netlify to your Render API, e.g.
+ *  https://<your-render-app>.onrender.com/api
+ */
+const API_BASE =
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") || "/api";
+
+async function getJsonOrText(res: Response) {
+  const ct = res.headers.get("content-type") || "";
+  const isJson = ct.includes("application/json");
+  const body = isJson ? await res.json() : await res.text();
+  if (!res.ok) {
+    const msg = isJson
+      ? body?.error || body?.message || JSON.stringify(body)
+      : (body as string)?.slice(0, 200) || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return body;
+}
+
 export default function Profile() {
   const { token } = useAuth();
 
@@ -27,7 +46,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // last Salesforce sync (from the form)
+  // Last Salesforce sync (from the form)
   const [lastSync, setLastSync] = useState<{
     accountId: string;
     contactId: string;
@@ -41,37 +60,26 @@ export default function Profile() {
       setLoading(true);
       setError(null);
       try {
-        // ---- 1) current user (handle both `{...}` and `{ user: {...} }` shapes)
-        const userResp = await fetch("/api/users/me", {
+        // ---- 1) current user (accept `{...}` or `{ user: {...} }`)
+        const userResp = await fetch(`${API_BASE}/users/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (!userResp.ok) {
-          const t = await userResp.text();
-          throw new Error(t || `GET /api/users/me failed (${userResp.status})`);
-        }
-
-        const raw = await userResp.json();
-        const user: Me = (raw && typeof raw === "object" && "user" in raw) ? (raw as any).user : raw;
+        const raw = await getJsonOrText(userResp);
+        const user: Me =
+          raw && typeof raw === "object" && "user" in raw ? (raw as any).user : (raw as Me);
         if (mounted) setMe(user);
 
-        // ---- 2) inventories (use studio list, filter by ownerId === me.id)
+        // ---- 2) inventories (list via studio endpoint, filter by ownerId)
         const rowsResp = await fetch(
-          "/api/studio/rows?model=Inventory&perPage=100&sort=createdAt&order=desc",
+          `${API_BASE}/studio/rows?model=Inventory&perPage=100&sort=createdAt&order=desc`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-
-        if (!rowsResp.ok) {
-          const t = await rowsResp.text();
-          throw new Error(t || `GET /api/studio/rows failed (${rowsResp.status})`);
-        }
-
-        const payload = await rowsResp.json();
+        const payload = await getJsonOrText(rowsResp);
         const mine: Inventory[] = (payload?.rows || []).filter((x: any) => x.ownerId === user.id);
         if (mounted) setInventories(mine);
       } catch (e: any) {
-        console.error(e);
         if (mounted) setError(e?.message || "Failed to load profile");
+        // still allow page render with empty panels
       } finally {
         if (mounted) setLoading(false);
       }
@@ -99,7 +107,6 @@ export default function Profile() {
       <TopNav />
 
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-2xl font-semibold">Profile</h1>
         <hr className="my-6 border-slate-800" />
 
         {error && (
@@ -168,13 +175,19 @@ export default function Profile() {
             <div className="mx-auto mb-6 max-w-xl rounded-xl border border-emerald-700/40 bg-emerald-600/10 p-4 text-sm text-emerald-200">
               <div className="font-medium mb-1">Last Salesforce sync</div>
               <div className="grid grid-cols-1 gap-1">
-                <div>Account Id: <code className="break-all">{lastSync.accountId}</code></div>
-                <div>Contact Id: <code className="break-all">{lastSync.contactId}</code></div>
+                <div>
+                  Account Id: <code className="break-all">{lastSync.accountId}</code>
+                </div>
+                <div>
+                  Contact Id: <code className="break-all">{lastSync.contactId}</code>
+                </div>
                 <div className="mt-2 opacity-80">Snapshot</div>
                 <div>Company: {lastSync.snapshot.companyName}</div>
                 <div>Job Title: {lastSync.snapshot.jobTitle || "—"}</div>
                 <div>Phone: {lastSync.snapshot.phone || "—"}</div>
-                <div>Newsletter: {lastSync.snapshot.newsletterOptIn ? "Yes" : "No"}</div>
+                <div>
+                  Newsletter: {lastSync.snapshot.newsletterOptIn ? "Yes" : "No"}
+                </div>
               </div>
             </div>
           )}
