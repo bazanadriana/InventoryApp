@@ -23,7 +23,8 @@ import statsRoutes from './routes/statsRoutes.js';
 
 import studioRoutes from './routes/studioRoutes.js';
 import requireAuth from './middleware/requireAuth.js';
-import salesforceRoutes from './routes/salesforceRoutes.js'; // <-- add .js extension for consistency
+import salesforceRoutes from './routes/salesforceRoutes.js'; 
+
 
 const app = express();
 

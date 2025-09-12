@@ -1,20 +1,29 @@
 import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-
-type Snapshot = {
-  companyName: string;
-  jobTitle: string;
-  phone: string;
-  newsletterOptIn: boolean;
-};
+import { getApiBase } from '../../lib/apiBase';
 
 type Props = {
-  onSuccess?: (data: {
+  onSuccess?: (ids: {
     accountId: string;
     contactId: string;
-    snapshot: Snapshot;
+    snapshot: { companyName: string; jobTitle: string; phone: string; newsletterOptIn: boolean };
   }) => void;
 };
+
+const API_BASE = getApiBase();
+
+async function getJsonOrText(res: Response) {
+  const ct = res.headers.get('content-type') || '';
+  const isJson = ct.includes('application/json');
+  const body = isJson ? await res.json() : await res.text();
+  if (!res.ok) {
+    const msg = isJson
+      ? body?.error || body?.message || JSON.stringify(body)
+      : (body as string)?.slice(0, 200) || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return body;
+}
 
 export default function SalesforceForm({ onSuccess }: Props) {
   const { token } = useAuth();
@@ -33,7 +42,7 @@ export default function SalesforceForm({ onSuccess }: Props) {
     setLoading(true);
 
     try {
-      const resp = await fetch('/api/integrations/salesforce/sync', {
+      const resp = await fetch(`${API_BASE}/integrations/salesforce/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,13 +51,12 @@ export default function SalesforceForm({ onSuccess }: Props) {
         body: JSON.stringify({ companyName, jobTitle, phone, newsletterOptIn }),
       });
 
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || 'Failed to sync');
-
+      const data = await getJsonOrText(resp);
       setMsg('Synced to Salesforce ✔︎');
+
       onSuccess?.({
-        accountId: data.accountId,
-        contactId: data.contactId,
+        accountId: (data as any).accountId,
+        contactId: (data as any).contactId,
         snapshot: { companyName, jobTitle, phone, newsletterOptIn },
       });
     } catch (e: any) {
@@ -59,18 +67,15 @@ export default function SalesforceForm({ onSuccess }: Props) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="w-full max-w-xl space-y-4 p-6 rounded-2xl border border-slate-700 bg-slate-900/40 text-slate-100"
-    >
+    <form onSubmit={handleSubmit} className="max-w-xl w-full space-y-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
       <h3 className="text-xl font-semibold">Send to Salesforce</h3>
 
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-200">
-          Company / Account Name<span className="text-red-400">*</span>
+        <label className="block text-sm font-medium">
+          Company / Account Name<span className="text-red-500">*</span>
         </label>
         <input
-          className="w-full rounded-lg border border-slate-600 p-2 bg-white text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2"
           required
           value={companyName}
           onChange={(e) => setCompanyName(e.target.value)}
@@ -79,9 +84,9 @@ export default function SalesforceForm({ onSuccess }: Props) {
       </div>
 
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-200">Job Title</label>
+        <label className="block text-sm font-medium">Job Title</label>
         <input
-          className="w-full rounded-lg border border-slate-600 p-2 bg-white text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2"
           value={jobTitle}
           onChange={(e) => setJobTitle(e.target.value)}
           placeholder="Operations Manager"
@@ -89,16 +94,16 @@ export default function SalesforceForm({ onSuccess }: Props) {
       </div>
 
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-200">Phone</label>
+        <label className="block text-sm font-medium">Phone</label>
         <input
-          className="w-full rounded-lg border border-slate-600 p-2 bg-white text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+52 55 1234 5678"
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-slate-200">
+      <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={newsletterOptIn}

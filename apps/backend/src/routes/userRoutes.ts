@@ -4,6 +4,52 @@ import { requireAuth } from '../auth/jwt.js';
 
 const router = Router();
 
+/**
+ * GET /api/users/me
+ * Return the currently authenticated user's profile.
+ */
+router.get('/me', requireAuth, async (req: Request, res: Response) => {
+  try {
+    // support either req.user.id or req.userId depending on middleware
+    const userId =
+      (req as any)?.user?.id ??
+      (req as any)?.userId ??
+      null;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        u."id",
+        u."email",
+        u."name",
+        u."image",
+        u."salesforceAccountId",
+        u."salesforceContactId",
+        u."createdAt",
+        u."updatedAt"
+      FROM "User" u
+      WHERE u."id" = $1
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Respond with the user object directly
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('GET /api/users/me failed:', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /** List users with search/sort/paging (basic) */
 router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -29,7 +75,12 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 
     const { rows } = await pool.query(
       `
-      SELECT u."id", u."email", u."name", u."image", u."createdAt"
+      SELECT
+        u."id",
+        u."email",
+        u."name",
+        u."image",
+        u."createdAt"
       FROM "User" u
       WHERE ($1::text IS NULL OR u."email" ILIKE $1 OR u."name" ILIKE $1)
       ORDER BY ${

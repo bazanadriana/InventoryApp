@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import TopNav from "../components/layout/TopNav";
 import SalesforceForm from "../components/profile/SalesforceForm";
 import { useAuth } from "../hooks/useAuth";
+import { getApiBase } from "../lib/apiBase";
 
 type Me = {
   id: number;
@@ -19,14 +20,7 @@ type Inventory = {
   ownerId: number;
 };
 
-// --- Resolve API base: ensure it ends with /api (fallback to /api for local proxies)
-function resolveApiBase() {
-  const raw = (import.meta.env.VITE_API_URL as string | undefined) || "";
-  if (!raw) return "/api";
-  const trimmed = raw.replace(/\/+$/, "");
-  return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
-}
-const API_BASE = resolveApiBase();
+const API_BASE = getApiBase();
 
 async function getJsonOrText(res: Response) {
   const ct = res.headers.get("content-type") || "";
