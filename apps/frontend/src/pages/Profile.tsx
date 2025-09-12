@@ -99,7 +99,7 @@ export default function Profile() {
       <TopNav />
 
       <div className="mx-auto max-w-6xl px-4 py-8">
-  
+        <h1 className="text-2xl font-semibold">Profile</h1>
         <hr className="my-6 border-slate-800" />
 
         {error && (
