@@ -21,11 +21,13 @@ type Inventory = {
 
 export default function Profile() {
   const { token } = useAuth();
+
   const [me, setMe] = useState<Me | null>(null);
   const [inventories, setInventories] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // last Salesforce sync from the form
+  // last Salesforce sync (from the form)
   const [lastSync, setLastSync] = useState<{
     accountId: string;
     contactId: string;
@@ -37,33 +39,48 @@ export default function Profile() {
 
     async function load() {
       setLoading(true);
+      setError(null);
       try {
-        // 1) current user
-        const u = await fetch("/api/users/me", {
+        // ---- 1) current user (handle both `{...}` and `{ user: {...} }` shapes)
+        const userResp = await fetch("/api/users/me", {
           headers: { Authorization: `Bearer ${token}` },
-        }).then((r) => r.json());
-        if (!mounted) return;
-        setMe(u);
+        });
 
-        // 2) inventories (owned by me). Use studio list and filter client-side for compatibility.
-        const rows = await fetch(
+        if (!userResp.ok) {
+          const t = await userResp.text();
+          throw new Error(t || `GET /api/users/me failed (${userResp.status})`);
+        }
+
+        const raw = await userResp.json();
+        const user: Me = (raw && typeof raw === "object" && "user" in raw) ? (raw as any).user : raw;
+        if (mounted) setMe(user);
+
+        // ---- 2) inventories (use studio list, filter by ownerId === me.id)
+        const rowsResp = await fetch(
           "/api/studio/rows?model=Inventory&perPage=100&sort=createdAt&order=desc",
           { headers: { Authorization: `Bearer ${token}` } }
-        ).then((r) => r.json());
-
-        const mine: Inventory[] = (rows?.rows || []).filter(
-          (x: any) => x.ownerId === u.id
         );
-        setInventories(mine);
-      } catch (e) {
+
+        if (!rowsResp.ok) {
+          const t = await rowsResp.text();
+          throw new Error(t || `GET /api/studio/rows failed (${rowsResp.status})`);
+        }
+
+        const payload = await rowsResp.json();
+        const mine: Inventory[] = (payload?.rows || []).filter((x: any) => x.ownerId === user.id);
+        if (mounted) setInventories(mine);
+      } catch (e: any) {
         console.error(e);
+        if (mounted) setError(e?.message || "Failed to load profile");
       } finally {
         if (mounted) setLoading(false);
       }
     }
 
     load();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [token]);
 
   const createdCount = inventories.length;
@@ -82,14 +99,23 @@ export default function Profile() {
       <TopNav />
 
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-2xl font-semibold">Profile</h1>
+  
         <hr className="my-6 border-slate-800" />
 
-        {/* User summary */}
+        {error && (
+          <div className="mb-6 rounded-lg border border-rose-600/40 bg-rose-600/10 text-rose-200 px-3 py-2 text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* User info + inventories */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
             <div className="text-lg font-semibold mb-3">Your info</div>
             {loading && <div className="opacity-70">Loading…</div>}
+            {!loading && !me && !error && (
+              <div className="opacity-70 text-sm">No user data found.</div>
+            )}
             {me && (
               <dl className="space-y-2 text-sm">
                 <div className="flex gap-3">
@@ -112,7 +138,6 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Inventories owned by the user */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
             <div className="text-lg font-semibold mb-3">
               Your inventories <span className="opacity-70">({createdCount})</span>
@@ -155,15 +180,21 @@ export default function Profile() {
           )}
 
           <div className="flex justify-center">
-            <SalesforceForm onSuccess={(data) => {
-              setLastSync(data);
-              // Optimistically reflect IDs in the UI if backend has already updated the user
-              setMe((prev) => prev ? {
-                ...prev,
-                salesforceAccountId: data.accountId,
-                salesforceContactId: data.contactId
-              } : prev);
-            }} />
+            <SalesforceForm
+              onSuccess={(data) => {
+                setLastSync(data);
+                // Optimistically reflect SF IDs in the summary
+                setMe((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        salesforceAccountId: data.accountId,
+                        salesforceContactId: data.contactId,
+                      }
+                    : prev
+                );
+              }}
+            />
           </div>
         </section>
       </div>
