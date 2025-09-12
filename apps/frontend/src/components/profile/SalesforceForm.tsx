@@ -1,8 +1,19 @@
 import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
+type Snapshot = {
+  companyName: string;
+  jobTitle: string;
+  phone: string;
+  newsletterOptIn: boolean;
+};
+
 type Props = {
-  onSuccess?: (ids: { accountId: string; contactId: string }) => void;
+  onSuccess?: (data: {
+    accountId: string;
+    contactId: string;
+    snapshot: Snapshot;
+  }) => void;
 };
 
 export default function SalesforceForm({ onSuccess }: Props) {
@@ -20,6 +31,7 @@ export default function SalesforceForm({ onSuccess }: Props) {
     setErr(null);
     setMsg(null);
     setLoading(true);
+
     try {
       const resp = await fetch('/api/integrations/salesforce/sync', {
         method: 'POST',
@@ -29,10 +41,16 @@ export default function SalesforceForm({ onSuccess }: Props) {
         },
         body: JSON.stringify({ companyName, jobTitle, phone, newsletterOptIn }),
       });
+
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error || 'Failed to sync');
+
       setMsg('Synced to Salesforce ✔︎');
-      onSuccess?.({ accountId: data.accountId, contactId: data.contactId });
+      onSuccess?.({
+        accountId: data.accountId,
+        contactId: data.contactId,
+        snapshot: { companyName, jobTitle, phone, newsletterOptIn },
+      });
     } catch (e: any) {
       setErr(e.message || 'Something went wrong');
     } finally {
